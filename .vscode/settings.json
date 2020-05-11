@@ -1,0 +1,3 @@
+{
+    "python.pythonPath": "${env:USERPROFILE}/miniconda3/envs/hensad/python.exe"
+}

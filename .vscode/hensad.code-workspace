@@ -1,0 +1,47 @@
+{
+	"folders": [
+		{
+			"name": "HENSAD",
+			"path": "../"
+		}
+	],
+	"settings": {
+		//folders to hide
+		"files.exclude": {
+			"**/.git": true,
+			"**/.svn": true,
+			"**/.hg": true,
+			"**/CVS": true,
+			"**/.DS_Store": true,
+			"**/__pycache__": true
+		},
+		"workbench.tree.indent": 20,
+		"autoDocstring.docstringFormat": "numpy",
+		"terminal.integrated.shell.windows": "C:\\WINDOWS\\System32\\cmd.exe",
+		"python.jediEnabled": false,
+		"python.formatting.provider": "autopep8",
+		"python.condaPath": "${env:USERPROFILE}/miniconda3/Scripts/conda.exe",
+		"python.envFile": "${workspaceFolder}/.vscode/.env",
+		"[python]": {
+			"editor.suggestSelection": "first",
+			"editor.defaultFormatter": "ms-python.python",
+			"editor.formatOnPaste": true,
+			"editor.formatOnSave": true,
+			"editor.formatOnType": true,
+			"editor.rulers": [
+				79
+			],
+		},
+		// linters
+		"python.linting.mypyEnabled": false,
+		"python.linting.enabled": false,
+		// git lens extension
+		"gitlens.views.repositories.location": "scm",
+		"gitlens.views.fileHistory.location": "scm",
+		"gitlens.views.lineHistory.location": "scm",
+		"gitlens.views.compare.location": "scm",
+		"gitlens.views.search.location": "scm",
+		// pyqt designer
+		"pyqt-integration.qtdesigner.path": "C:\\Users\\Felipe\\miniconda3\\envs\\hensad\\Scripts\\pyqt5designer.exe"
+	}
+}
