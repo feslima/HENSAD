@@ -1,0 +1,21 @@
+{
+    // See https://go.microsoft.com/fwlink/?LinkId=733558
+    // for the documentation about the tasks.json format
+    "version": "2.0.0",
+    "options": {
+        },
+    "tasks": [
+        {
+            "label": "compile UI",
+            "type": "shell",
+            "command": "${config:python.pythonPath} ${workspaceFolder}/src/gui/views/convert_ui.py",
+            "problemMatcher": []
+        },
+        {
+            "label": "compile resources",
+            "type": "shell",
+            "command": "${env:USERPROFILE}/miniconda3/envs/hensad/Scripts/pyrcc5.exe -o ${workspaceFolder}/src/gui/resources/icons_rc.py ${workspaceFolder}/src/gui/resources/icons.qrc",
+            "problemMatcher": []
+        }
+    ]
+}
