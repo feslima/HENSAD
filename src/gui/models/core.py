@@ -1,3 +1,6 @@
+import json
+import pathlib
+
 import numpy as np
 import pandas as pd
 from PyQt5.QtCore import QObject, pyqtSignal
@@ -9,6 +12,8 @@ from hensad import (
 
 EMPTY_SUMMARY = pd.DataFrame(columns=SummaryFrameMapper.columns())
 EMPTY_STREAM = pd.DataFrame(columns=StreamFrameMapper.columns())
+
+STFM = StreamFrameMapper
 
 
 class Setup(QObject):
@@ -89,6 +94,15 @@ class Setup(QObject):
 
         self._cold = value
         self.cold_changed.emit()
+
+    @property
+    def hot_interval(self) -> pd.Series:
+        """Unique temperature interval values for the hot side. Values are
+        sorted from largest to smallest."""
+        if not hasattr(self, '_hot_interval'):
+            self._hot_interval = pd.Series(np.nan)
+
+        return self._hot_interval
 
     @property
     def summary(self) -> pd.DataFrame:
@@ -190,6 +204,9 @@ class Setup(QObject):
 
         else:
             # calculation was successful
+            # update the temperature interval values
+            hit, _ = calculate_intervals(self.hot, self.cold, self.dt)
+            self._hot_interval = hit
 
             # set pinch and utilities
             pinch, hur, cur = calculate_pinch_utilities(summary)
@@ -229,7 +246,7 @@ class Setup(QObject):
             cold = self.cold.append(new_row, ignore_index=True)
             self.cold = cold
 
-    def delete_stream(self, index: int, typ: str):
+    def delete_stream(self, index: int, typ: str) -> None:
         if typ == 'hot':
             hot = self.hot.drop(labels=self.hot.index[index], axis='index')
             hot.reset_index(drop=True, inplace=True)
@@ -238,3 +255,42 @@ class Setup(QObject):
             cold = self.cold.drop(labels=self.cold.index[index], axis='index')
             cold.reset_index(drop=True, inplace=True)
             self.cold = cold
+
+    def load(self, filename: str) -> None:
+        check_file_exists(filename)
+
+        with open(filename, 'r') as fp:
+            hsd = json.load(fp)
+        hot = pd.DataFrame(hsd['hot'])
+        hot = hot.astype({key: float for key in STFM.columns()})
+        hot.index = hot.index.astype(int)
+
+        cold = pd.DataFrame(hsd['cold'])
+        cold = cold.astype({key: float for key in STFM.columns()})
+        cold.index = cold.index.astype(int)
+
+        self.blockSignals(True)
+
+        self.hot = hot
+        self.cold = cold
+
+        self.blockSignals(False)
+
+        self.dt = hsd['dt']
+
+    def save(self, filename: str) -> None:
+        dump = {
+            'dt': self.dt,
+            'hot': self.hot.to_dict(),
+            'cold': self.cold.to_dict(),
+        }
+
+        with open(filename, 'w') as fp:
+            json.dump(dump, fp, indent=4)
+
+
+def check_file_exists(filename: str) -> None:
+    filepath = pathlib.Path(filename).resolve()
+
+    if not filepath.exists() or not filepath.is_file():
+        raise FileNotFoundError("Invalid .hsd file specified.")

@@ -76,6 +76,7 @@ class Ui_MainWindow(object):
         self.dtApproachLineEdit.setInputMask("")
         self.dtApproachLineEdit.setMaxLength(3)
         self.dtApproachLineEdit.setAlignment(QtCore.Qt.AlignCenter)
+        self.dtApproachLineEdit.setClearButtonEnabled(False)
         self.dtApproachLineEdit.setObjectName("dtApproachLineEdit")
         self.gridLayout_4.addWidget(self.dtApproachLineEdit, 2, 1, 1, 1)
         spacerItem = QtWidgets.QSpacerItem(20, 40, QtWidgets.QSizePolicy.Minimum, QtWidgets.QSizePolicy.Expanding)

@@ -123,11 +123,7 @@ class MainWindow(QMainWindow):
         ).resolve()
 
         if current_hsd_name.exists():
-            dump_to_hsd(
-                str(current_hsd_name),
-                self._setup.hot,
-                self._setup.cold
-            )
+            self._setup.save(str(current_hsd_name))
         else:
             self.save_file_as()
 
@@ -145,11 +141,7 @@ class MainWindow(QMainWindow):
 
         if hsd_filepath != '':
             self.setWindowTitle("HENSAD - " + hsd_filepath)
-            dump_to_hsd(
-                hsd_filepath,
-                self._setup.hot,
-                self._setup.cold
-            )
+            self._setup.save(str(hsd_filepath))
 
     def open_file(self):
         dialog_title = "Select the .hsd file to open."
@@ -164,9 +156,7 @@ class MainWindow(QMainWindow):
 
         if hsd_filepath != '':
             self.setWindowTitle("HENSAD - " + hsd_filepath)
-            hot, cold = read_from_hsd(hsd_filepath)
-            self._setup.hot = hot
-            self._setup.cold = cold
+            self._setup.load(hsd_filepath)
 
     def on_add_hot_stream_clicked(self):
         self._setup.add_stream('hot')
@@ -209,33 +199,6 @@ class MainWindow(QMainWindow):
             self.ui.tiDiagramPushButton.setEnabled(True)
         else:
             self.ui.tiDiagramPushButton.setEnabled(False)
-
-
-def dump_to_hsd(filename: str, hot: pd.DataFrame, cold: pd.DataFrame):
-    dump = {
-        'hot': hot.to_dict(),
-        'cold': cold.to_dict(),
-    }
-
-    with open(filename, 'w') as fp:
-        json.dump(dump, fp, indent=4)
-
-
-def read_from_hsd(filename: str):
-    with open(filename, 'r') as fp:
-        hsd = json.load(fp)
-    hot = pd.DataFrame(hsd['hot'])
-    hot = hot.astype(
-        {key: float for key in StreamFrameMapper.columns()}
-    )
-    hot.index = hot.index.astype(int)
-
-    cold = pd.DataFrame(hsd['cold'])
-    cold = cold.astype(
-        {key: float for key in StreamFrameMapper.columns()}
-    )
-    cold.index = cold.index.astype(int)
-    return hot, cold
 
 
 if __name__ == "__main__":

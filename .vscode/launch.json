@@ -13,10 +13,10 @@
             "justMyCode": false
         },
         {
-            "name": "tempdiagram",
+            "name": "Temperature Interval",
             "type": "python",
             "request": "launch",
-            "program": "${workspaceFolder}/src/gui/views/tempdiagram.py",
+            "program": "${workspaceFolder}/src/gui/views/diagrams/temperatureinterval.py",
             "console": "integratedTerminal",
             "justMyCode": false
         },
