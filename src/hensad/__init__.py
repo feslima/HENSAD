@@ -33,6 +33,13 @@ class SummaryFrameMapper(FrameColumnMapperEnum):
     CUMHEAT = 'Cumulative Heat'
 
 
+@unique
+class HeatFlowFrameMapper(FrameColumnMapperEnum):
+    UTIL = 'Hot Utility Flow'
+    OUT = 'Heat Out'
+    EXHEAT = 'Excess Heat'
+
+
 class BaseUnits(ABC):
     @property
     def mass(self) -> str:
@@ -342,3 +349,34 @@ def calculate_minimum_exchangers(
 
     # equation 15.1
     return len(hot) + len(cold) + num_hot_util + num_cold_util - 1
+
+
+def calculate_heat_flows(summary: pd.DataFrame) -> pd.DataFrame:
+    if summary.empty:
+        raise ValueError("Can't determine heat flows on an empty summary.")
+
+    heat_flow = pd.DataFrame(columns=HeatFlowFrameMapper.columns())
+    heat_flow = heat_flow.astype({c: float for c in heat_flow.columns})
+
+    n_intervals = len(summary)
+
+    out_prev = 0.0
+    i = 0
+    while i < n_intervals:
+        exheat = summary.at[i, SummaryFrameMapper.EXHEAT.name]
+        out = out_prev + exheat
+
+        if out <= 0.0:
+            # no excess heat enough to be dumped
+            util = np.abs(out)
+            out = 0.0
+
+        else:
+            util = 0.0
+
+        heat_flow.loc[i, heat_flow.columns] = [util, out, exheat]
+
+        i += 1
+        out_prev = out
+
+    return heat_flow

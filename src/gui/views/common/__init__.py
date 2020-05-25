@@ -7,11 +7,11 @@ from PyQt5.QtWidgets import (QGraphicsItem, QGraphicsLineItem,
 
 class ArrowItem(QGraphicsLineItem):
     def __init__(self, x1: float, y1: float, x2: float, y2: float,
-                 color: QColor = Qt.black, parent: QGraphicsItem = None):
+                 color: QColor = Qt.black, width: int = 2,
+                 parent: QGraphicsItem = None):
         super().__init__(x1, y1, x2, y2, parent)
         self._tip_size = 10  # pixels
         self._tip_path = QPainterPath()
-        width = 2  # pixels
         pen = QPen(color, width, style=Qt.SolidLine,
                    cap=Qt.RoundCap, join=Qt.RoundJoin)
         self.setPen(pen)
@@ -30,7 +30,7 @@ class ArrowItem(QGraphicsLineItem):
 
     def paint(self, painter: QPainter, option: QStyleOptionGraphicsItem,
               widget: QWidget = None) -> None:
-        painter.setPen(self.pen().color())
+        painter.setPen(self.pen())
         painter.setBrush(self.pen().color())
         shaft = self.line()
         painter.drawLine(shaft.p1(), shaft.p2())

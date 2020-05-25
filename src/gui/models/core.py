@@ -5,15 +5,19 @@ import numpy as np
 import pandas as pd
 from PyQt5.QtCore import QObject, pyqtSignal
 
-from hensad import (
-    BaseUnits, SIUnits, StreamFrameMapper, SummaryFrameMapper, USUnits,
-    calculate_intervals, calculate_minimum_exchangers,
-    calculate_pinch_utilities, calculate_summary_table, pinch_streams_tables)
+from hensad import (BaseUnits, HeatFlowFrameMapper, SIUnits,
+                    StreamFrameMapper, SummaryFrameMapper, USUnits,
+                    calculate_heat_flows, calculate_intervals,
+                    calculate_minimum_exchangers, calculate_pinch_utilities,
+                    calculate_summary_table, pinch_streams_tables)
 
 EMPTY_SUMMARY = pd.DataFrame(columns=SummaryFrameMapper.columns())
 EMPTY_STREAM = pd.DataFrame(columns=StreamFrameMapper.columns())
+EMPTY_HEATFLOW = pd.DataFrame(columns=HeatFlowFrameMapper.columns())
 
 STFM = StreamFrameMapper
+SFM = SummaryFrameMapper
+HFM = HeatFlowFrameMapper
 
 
 class Setup(QObject):
@@ -103,6 +107,15 @@ class Setup(QObject):
             self._hot_interval = pd.Series(np.nan)
 
         return self._hot_interval
+
+    @property
+    def heat_flow(self) -> pd.DataFrame:
+        """Frame containing the heat flow from hot utility into intervals and
+        between intervals."""
+        if not hasattr(self, '_heat_flow'):
+            self._heat_flow = EMPTY_HEATFLOW.copy(deep=True)
+
+        return self._heat_flow
 
     @property
     def summary(self) -> pd.DataFrame:
@@ -202,6 +215,8 @@ class Setup(QObject):
             hb = EMPTY_STREAM.copy(deep=True)
             cb = EMPTY_STREAM.copy(deep=True)
 
+            hf = EMPTY_HEATFLOW.copy(deep=True)
+
         else:
             # calculation was successful
             # update the temperature interval values
@@ -215,6 +230,9 @@ class Setup(QObject):
             ha, ca, hb, cb = pinch_streams_tables(self.hot, self.cold,
                                                   self.dt, pinch)
 
+            # heat flow info
+            hf = calculate_heat_flows(summary)
+
         # set the results
         self._summary = summary
 
@@ -226,6 +244,8 @@ class Setup(QObject):
         self._cold_above = ca
         self._hot_below = hb
         self._cold_below = cb
+
+        self._heat_flow = hf
 
         # minimum number of exchangers
         self._above_min_exchangers = calculate_minimum_exchangers(

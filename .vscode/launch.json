@@ -21,6 +21,14 @@
             "justMyCode": false
         },
         {
+            "name": "Cascade",
+            "type": "python",
+            "request": "launch",
+            "program": "${workspaceFolder}/src/gui/views/diagrams/cascade.py",
+            "console": "integratedTerminal",
+            "justMyCode": false
+        },
+        {
             "name": "Python: Current File",
             "type": "python",
             "request": "launch",
