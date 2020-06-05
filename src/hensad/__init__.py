@@ -31,6 +31,8 @@ class SummaryFrameMapper(FrameColumnMapperEnum):
     TOUT = 'Final Temperature'
     EXHEAT = 'Excess Heat'
     CUMHEAT = 'Cumulative Heat'
+    HOTSTRIDX = 'Hot Stream Index'
+    COLDSTRIDX = 'Cold Stream Index'
 
 
 @unique
@@ -199,6 +201,9 @@ def calculate_summary_table(hot: pd.DataFrame, cold: pd.DataFrame,
                     ((cold_in + dt) <= itout and (cold_out + dt) >= itin):
                 cold_streams.append(s)
         cold_streams = sorted(cold_streams)
+
+        intervals.at[i, SFM.HOTSTRIDX.name] = hot_streams
+        intervals.at[i, SFM.COLDSTRIDX.name] = cold_streams
 
         # calculate the excess and cumulative heat
         exheat = 0.0

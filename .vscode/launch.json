@@ -29,6 +29,14 @@
             "justMyCode": false
         },
         {
+            "name": "Enthalpy",
+            "type": "python",
+            "request": "launch",
+            "program": "${workspaceFolder}/src/gui/views/diagrams/enthalpy.py",
+            "console": "integratedTerminal",
+            "justMyCode": false
+        },
+        {
             "name": "Python: Current File",
             "type": "python",
             "request": "launch",

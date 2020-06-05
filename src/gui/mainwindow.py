@@ -21,7 +21,6 @@ class MinTempApproachValidator(QIntValidator):
     def fixup(self, inp: str):
         if inp == '':
             inp = str(DEFAULT_DT)
-        # return super().fixup(inp)
         return inp
 
 
