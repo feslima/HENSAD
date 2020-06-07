@@ -1,8 +1,9 @@
 import numpy as np
 from pandas import Series
 from PyQt5.QtCore import (
-    QAbstractItemModel, QAbstractTableModel, QModelIndex, Qt)
-from PyQt5.QtGui import QDoubleValidator, QFont
+    QAbstractItemModel, QAbstractTableModel, QModelIndex, QRegExp, Qt)
+from PyQt5.QtGui import (QBrush, QDoubleValidator, QFont, QPalette,
+                         QRegExpValidator)
 from PyQt5.QtWidgets import (QItemDelegate, QLineEdit, QStyleOptionViewItem,
                              QTableView, QWidget)
 
@@ -10,6 +11,17 @@ from .core import Setup, StreamFrameMapper
 
 _BOLD_HEADER_FONT = QFont()
 _BOLD_HEADER_FONT.setBold(True)
+
+
+class StreamIdDelegate(QItemDelegate):
+    def createEditor(self, parent: QWidget, option: QStyleOptionViewItem,
+                     index: QModelIndex):
+        line_editor = QLineEdit(parent)
+        reg_ex = QRegExp("^[a-z$0-9][a-z_$0-9]{,9}$")
+        input_validator = QRegExpValidator(reg_ex, line_editor)
+        line_editor.setValidator(input_validator)
+
+        return line_editor
 
 
 class DoubleEditorDelegate(QItemDelegate):
@@ -115,16 +127,27 @@ class StreamInputTableModel(QAbstractTableModel):
 
         row = index.row()
         col = index.column()
+        colname = self._input_table.columns[col]
 
         value = self._input_table.at[
             row,
-            self._input_table.columns[col]
+            colname
         ]
 
         if role == Qt.DisplayRole:
-            return "{0:.6g}".format(value)
+            if colname == StreamFrameMapper.ID.name:
+                return str(value)
+            else:
+                return "{0:.6g}".format(value)
         elif role == Qt.TextAlignmentRole:
             return Qt.AlignCenter
+        elif role == Qt.BackgroundRole:
+            if colname == StreamFrameMapper.ID.name:
+                counts = self._input_table.loc[:, colname].value_counts()
+                if counts[value] > 1:
+                    return QBrush(Qt.red)
+                else:
+                    QBrush(self.parent().palette().brush(QPalette.Base))
         else:
             return None
 

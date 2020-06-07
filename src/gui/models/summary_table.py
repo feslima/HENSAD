@@ -9,6 +9,8 @@ from .core import Setup, SummaryFrameMapper
 _HEADER_FONT = QFont()
 _HEADER_FONT.setBold(True)
 
+SFM = SummaryFrameMapper
+
 
 class SummaryModel(QAbstractTableModel):
 
@@ -32,13 +34,15 @@ class SummaryModel(QAbstractTableModel):
         return len(self._summary)
 
     def columnCount(self, parent: QModelIndex = QModelIndex()):
-        return len(self._summary.columns)
+        return len(self._summary.columns) - 2
 
     def headerData(self, section: int, orientation=Qt.Orientation,
                    role=Qt.DisplayRole):
         if role == Qt.DisplayRole:
             if orientation == Qt.Horizontal:
-                return SummaryFrameMapper.headers()[section]
+                sec = SFM.headers()[section]
+                if sec not in [SFM.HOTSTRIDX.value, SFM.COLDSTRIDX.value]:
+                    return sec
             else:
                 return None
 
@@ -61,7 +65,7 @@ class SummaryModel(QAbstractTableModel):
             if isinstance(value, float):
                 return "{0:.6g}".format(value)
             else:
-                return value
+                return str(value)
         elif role == Qt.TextAlignmentRole:
             return Qt.AlignCenter
         else:

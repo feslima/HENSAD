@@ -8,7 +8,7 @@ from PyQt5.QtWidgets import (QApplication, QFileDialog, QHeaderView,
                              QMainWindow, QTableView)
 
 from gui.models.core import Setup, StreamFrameMapper
-from gui.models.input_streams import (StreamEditorDelegate,
+from gui.models.input_streams import (StreamEditorDelegate, StreamIdDelegate,
                                       StreamInputTableModel,
                                       TemperatureEditorDelegate)
 from gui.models.summary_table import SummaryModel
@@ -112,6 +112,8 @@ class MainWindow(QMainWindow):
                 delegate = TemperatureEditorDelegate()
             elif col == SFM.CP.name or col == SFM.FLOW.name:
                 delegate = StreamEditorDelegate()
+            elif col == SFM.ID.name:
+                delegate = StreamIdDelegate()
 
             delegates.append(delegate)
             table.setItemDelegateForColumn(idx, delegate)
@@ -191,8 +193,12 @@ class MainWindow(QMainWindow):
 
         SFM = StreamFrameMapper
 
-        hot_ok = (hot[SFM.TIN.name] > hot[SFM.TOUT.name]).all()
-        cold_ok = (cold[SFM.TIN.name] < cold[SFM.TOUT.name]).all()
+        hot_ok = (hot[SFM.TIN.name] > hot[SFM.TOUT.name]).all() and \
+            (hot[SFM.ID.name].value_counts() == 1).all() and \
+            not hot.empty
+        cold_ok = (cold[SFM.TIN.name] < cold[SFM.TOUT.name]).all() and \
+            (cold[SFM.ID.name].value_counts() == 1).all() and \
+            not cold.empty
 
         if hot_ok and cold_ok:
             self.ui.tiDiagramPushButton.setEnabled(True)
