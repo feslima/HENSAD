@@ -12,6 +12,8 @@ from .core import Setup, StreamFrameMapper
 _BOLD_HEADER_FONT = QFont()
 _BOLD_HEADER_FONT.setBold(True)
 
+_MAX_NUM_DIGITS = 10
+
 
 class StreamIdDelegate(QItemDelegate):
     def createEditor(self, parent: QWidget, option: QStyleOptionViewItem,
@@ -47,7 +49,9 @@ class PositiveDoubleEditorDelegate(DoubleEditorDelegate):
                      index: QModelIndex):
         line_editor = QLineEdit(parent)
         line_editor.setAlignment(Qt.AlignCenter)
-        double_validator = QDoubleValidator(0.0, 100, 6, parent=line_editor)
+        double_validator = QDoubleValidator(
+            0.0, 100, _MAX_NUM_DIGITS,
+            parent=line_editor)
         line_editor.setValidator(double_validator)
 
         return line_editor
@@ -58,7 +62,9 @@ class StreamEditorDelegate(DoubleEditorDelegate):
                      index: QModelIndex):
         line_editor = QLineEdit(parent)
         line_editor.setAlignment(Qt.AlignCenter)
-        double_validator = QDoubleValidator(0.0, 1.0e9, 6, parent=line_editor)
+        double_validator = QDoubleValidator(
+            0.0, 1.0e9, _MAX_NUM_DIGITS, parent=line_editor
+        )
         line_editor.setValidator(double_validator)
 
         return line_editor
@@ -72,7 +78,7 @@ class TemperatureEditorDelegate(DoubleEditorDelegate):
         min_temp = -459.67  # 0K in Fahrenheit
         max_temp = 18032.0  # 10000 C in Fahrenheit
         double_validator = QDoubleValidator(
-            min_temp, max_temp, 3, parent=line_editor
+            min_temp, max_temp, _MAX_NUM_DIGITS, parent=line_editor
         )
         line_editor.setValidator(double_validator)
 
