@@ -7,9 +7,12 @@ from PyQt5.QtGui import QIntValidator
 from PyQt5.QtWidgets import (QApplication, QFileDialog, QHeaderView,
                              QMainWindow, QTableView)
 
-from gui.models.core import Setup, StreamFrameMapper
-from gui.models.input_streams import (StreamEditorDelegate, StreamIdDelegate,
-                                      StreamInputTableModel,
+from gui.models.core import (FilmCoefficientsFrameMapper, Setup,
+                             StreamFrameMapper)
+from gui.models.input_streams import (FilmCoefficientEditorDelegate,
+                                      StreamEditorDelegate,
+                                      StreamFilmCoeffTableModel,
+                                      StreamIdDelegate, StreamInputTableModel,
                                       TemperatureEditorDelegate)
 from gui.models.summary_table import SummaryModel
 from gui.views.py.mainwindow import Ui_MainWindow
@@ -44,6 +47,18 @@ class MainWindow(QMainWindow):
 
         self.set_input_table_delegates('hot')
 
+        hot_coef_table = self.ui.hotFilmCoefTableView
+        hot_coef_model = StreamFilmCoeffTableModel(
+            self._setup, 'hot', hot_coef_table
+        )
+        hot_coef_table.setModel(hot_coef_model)
+
+        hot_coef_table.horizontalHeader().setSectionResizeMode(
+            QHeaderView.Stretch
+        )
+
+        self.set_film_coef_delegates('hot')
+
         cold_table = self.ui.coldStreamTableView
         cold_model = StreamInputTableModel(self._setup, 'cold', cold_table)
         cold_table.setModel(cold_model)
@@ -52,6 +67,18 @@ class MainWindow(QMainWindow):
         cold_table.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
 
         self.set_input_table_delegates('cold')
+
+        cold_coef_table = self.ui.coldFilmCoefTableView
+        cold_coef_model = StreamFilmCoeffTableModel(
+            self._setup, 'cold', cold_coef_table
+        )
+        cold_coef_table.setModel(cold_coef_model)
+
+        cold_coef_table.horizontalHeader().setSectionResizeMode(
+            QHeaderView.Stretch
+        )
+
+        self.set_film_coef_delegates('cold')
 
         summary_table = self.ui.summaryTableView
         summary_model = SummaryModel(self._setup, summary_table)
@@ -117,6 +144,18 @@ class MainWindow(QMainWindow):
 
             delegates.append(delegate)
             table.setItemDelegateForColumn(idx, delegate)
+
+    def set_film_coef_delegates(self, typ: str):
+        if typ == 'hot':
+            frame = self._setup.hot_film_coef
+            table = self.ui.hotFilmCoefTableView
+            delegates = self._hot_delegates
+        elif typ == 'cold':
+            frame = self._setup.cold_film_coef
+            table = self.ui.coldFilmCoefTableView
+            delegates = self._cold_delegates
+
+        table.setItemDelegateForColumn(0, FilmCoefficientEditorDelegate())
 
     def save_file(self):
         current_hsd_name = pathlib.Path(

@@ -18,6 +18,7 @@ class FrameColumnMapperEnum(Enum):
 
 @unique
 class StreamFrameMapper(FrameColumnMapperEnum):
+    ID = 'Stream ID'
     FLOW = 'Mass flow rate'
     CP = 'Specific Heat Capacity'
     TIN = 'Inlet Temperature'
@@ -40,6 +41,26 @@ class HeatFlowFrameMapper(FrameColumnMapperEnum):
     UTIL = 'Hot Utility Flow'
     OUT = 'Heat Out'
     EXHEAT = 'Excess Heat'
+
+
+@unique
+class HeatExchangerDesignFrameMapper(FrameColumnMapperEnum):
+    ID = 'Exchanger ID'
+    INT = 'Interval'
+    DUTY = 'Heat Duty'
+    SOURCE = 'Stream Source'
+    DEST = 'Stream Destination'
+    TYPE = 'Exchanger Type'
+    DT = 'Delta T (lm)'
+    U = 'Heat Transfer Coefficient'
+    A = 'Exchange Area'
+    F = 'Correction Factor'
+
+
+@unique
+class FilmCoefficientsFrameMapper(FrameColumnMapperEnum):
+    ID = 'Stream ID'
+    COEF = 'Film Heat Transfer Coefficient'
 
 
 class BaseUnits(ABC):
@@ -385,3 +406,39 @@ def calculate_heat_flows(summary: pd.DataFrame) -> pd.DataFrame:
         out_prev = out
 
     return heat_flow
+
+
+def calculate_log_mean_diff(ex_type: str, hot_in: float, hot_out: float,
+                            cold_in: float, cold_out: float) -> float:
+    """Calculates the log mean temperature difference for either co-current or
+    counter-current exchangers.
+
+    Parameters
+    ----------
+    ex_type : str
+        Exchanter type: 'co' for co-current, 'counter' for counter-current.
+    hot_in : float
+        Hot inlet temperature.
+    hot_out : float
+        Hot outlet temperature.
+    cold_in : float
+        Cold inlet temperature.
+    cold_out : float
+        Cold outlet temperature.
+
+
+    Returns
+    -------
+    float
+        Log mean temperature difference value.
+    """
+    if ex_type == 'co':
+        DTA = hot_in - cold_in
+        DTB = hot_out - cold_out
+    elif ex_type == 'counter':
+        DTA = hot_in - cold_out
+        DTB = hot_out - cold_in
+    else:
+        raise ValueError("Invalid approach type.")
+
+    return (DTA - DTB) / np.log(DTA / DTB)
