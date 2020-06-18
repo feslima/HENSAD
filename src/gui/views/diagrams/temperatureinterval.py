@@ -96,7 +96,8 @@ class TemperatureIntervalDiagramScene(QGraphicsScene):
         scene = self
         h = scene.height() - (self._top_p + self._bot_p)
 
-        n = np.nonzero(t == interval)[0].item()
+        # n = np.nonzero(t == interval)[0].item()
+        n = np.nonzero(np.isclose(t, interval))[0].item()
         px = n * (h / (interval.size - 1))
 
         return px
@@ -173,7 +174,9 @@ class TemperatureIntervalDiagramScene(QGraphicsScene):
             text.setPos(x - text_size / 2, y + 0.5 * int_size)
 
             # Excess heat values
-            text = scene.addText(str(summary.loc[i, SFM.EXHEAT.name]))
+            text = scene.addText("{0:g}".format(
+                summary.loc[i, SFM.EXHEAT.name]
+            ))
             text.setFont(font)
             text_size = fm.horizontalAdvance(text.toPlainText())
             text.setPos(self._map_x(w), y + 0.5 * int_size)

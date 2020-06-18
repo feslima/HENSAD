@@ -6,14 +6,9 @@ from PyQt5.QtGui import (
 from PyQt5.QtWidgets import (QApplication, QDialog, QGraphicsScene,
                              QGraphicsView)
 
-from gui.models.core import (HeatFlowFrameMapper, Setup, StreamFrameMapper,
-                             SummaryFrameMapper)
+from gui.models.core import HFM, SFM, STFM, Setup
 from gui.views.common import ArrowItem
 from gui.views.py.cascadediagram import Ui_Dialog
-
-STFM = StreamFrameMapper
-SFM = SummaryFrameMapper
-HFM = HeatFlowFrameMapper
 
 
 class CascadeDiagramDialog(QDialog):

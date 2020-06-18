@@ -37,6 +37,14 @@
             "justMyCode": false
         },
         {
+            "name": "PinchDesign",
+            "type": "python",
+            "request": "launch",
+            "program": "${workspaceFolder}/src/gui/views/designs/pinchdesign.py",
+            "console": "integratedTerminal",
+            "justMyCode": false
+        },
+        {
             "name": "Python: Current File",
             "type": "python",
             "request": "launch",

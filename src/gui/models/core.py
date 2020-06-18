@@ -25,6 +25,14 @@ HFM = HeatFlowFrameMapper
 HEDFM = HeatExchangerDesignFrameMapper
 FCFM = FilmCoefficientsFrameMapper
 
+HEDFM_STR_COLS = [
+    HEDFM.ID.name,
+    HEDFM.INT.name,
+    HEDFM.SOURCE.name,
+    HEDFM.DEST.name,
+    HEDFM.TYPE.name
+]
+
 
 class Setup(QObject):
     units_changed = pyqtSignal()
@@ -460,37 +468,49 @@ class Setup(QObject):
             raise ValueError("Heat transfer film coefficients must be set.")
 
         # check if exchanger id is unique
-        if ex_id in design[HEDFM.ID.name]:
+        if ex_id in design[HEDFM.ID.name].values:
             raise ValueError("Heat exchanger ID must be unique.")
 
         # check if streams ids (both hot and cold exists)
-        if stream_source not in hot_df[STFM.ID.name]:
+        if stream_source not in hot_df[STFM.ID.name].values:
             raise KeyError("Stream {0} not found.".format(stream_source))
 
-        if stream_dest not in cold_df[STFM.ID.name]:
+        if stream_dest not in cold_df[STFM.ID.name].values:
             raise KeyError("Stream {0} not found.".format(stream_dest))
 
-        # check if the duty is feasible
         hot_stream_info = hot_df.loc[hot_df[STFM.ID.name] == stream_source, :]
-        h_tin = hot_stream_info[STFM.TIN.name]
-        h_tout = hot_stream_info[STFM.TOUT.name]
-        h_cp = hot_stream_info[STFM.CP.name]
-        h_mf = hot_stream_info[STFM.FLOW.name]
+        h_tin = hot_stream_info[STFM.TIN.name].item()
+
+        if stream_source in design[HEDFM.SOURCE.name].values:
+            h_tout = design.loc[
+                design[HEDFM.SOURCE.name] == stream_source, HEDFM.HOT_IN.name
+            ].max()
+        else:
+            h_tout = hot_stream_info[STFM.TOUT.name].item()
+
+        h_cp = hot_stream_info[STFM.CP.name].item()
+        h_mf = hot_stream_info[STFM.FLOW.name].item()
 
         cold_stream_info = cold_df.loc[cold_df[STFM.ID.name] == stream_dest, :]
-        c_tin = cold_stream_info[STFM.TIN.name]
-        c_tout = cold_stream_info[STFM.TOUT.name]
-        c_cp = cold_stream_info[STFM.CP.name]
-        c_mf = cold_stream_info[STFM.FLOW.name]
+        if stream_dest in design[HEDFM.DEST.name].values:
+            c_tin = design.loc[
+                design[HEDFM.DEST.name] == stream_dest, HEDFM.COLD_OUT.name
+            ].max()
+        else:
+            c_tin = cold_stream_info[STFM.TIN.name].item()
+
+        c_tout = cold_stream_info[STFM.TOUT.name].item()
+        c_cp = cold_stream_info[STFM.CP.name].item()
+        c_mf = cold_stream_info[STFM.FLOW.name].item()
 
         # check duty with stream heat capacities calculate outlet temperatures
-        if duty > np.abs((h_mf * h_cp) * (h_tin - h_tout)):
+        if duty > np.abs((h_mf * h_cp) * (h_tin - h_tout)).item():
             raise ValueError("The specified heat duty is not feasible for the "
                              "hot stream.")
         else:
-            h_tout = h_tin - duty / (h_mf * h_cp)
+            h_tin = h_tout + duty / (h_mf * h_cp)
 
-        if duty > np.abs((c_mf * c_cp) * (c_tout - c_tin)):
+        if duty > np.abs((c_mf * c_cp) * (c_tout - c_tin)).item():
             raise ValueError("The specified heat duty is not feasible for the "
                              "cold stream.")
         else:
@@ -503,15 +523,23 @@ class Setup(QObject):
         ex_type = 'counter'
         dtln = calculate_log_mean_diff(ex_type, h_tin, h_tout, c_tin, c_tout)
 
+        # check if the calculated log mean violates the minimun approach
+        if dtln < self.dt:
+            err_msg = ("The duty and stream combinations violate the minimum "
+                       "approach temperature.\n"
+                       "Calculated log mean = {0}.\n"
+                       "Minimum approach = {1}").format(dtln, self.dt)
+            raise ValueError(err_msg)
+
         # heat transfer coefficient
         hot_coef = self.hot_film_coef.loc[
             self.hot_film_coef[FCFM.ID.name] == stream_source,
             FCFM.COEF.name
-        ]
+        ].item()
         cold_coef = self.cold_film_coef.loc[
             self.cold_film_coef[FCFM.ID.name] == stream_dest,
             FCFM.COEF.name
-        ]
+        ].item()
         u = 1 / (1 / hot_coef + 1 / cold_coef)
 
         # exchanger area
@@ -525,6 +553,10 @@ class Setup(QObject):
             HEDFM.SOURCE.name: stream_source,
             HEDFM.DEST.name: stream_dest,
             HEDFM.TYPE.name: ex_type,
+            HEDFM.HOT_IN.name: h_tin,
+            HEDFM.HOT_OUT.name: h_tout,
+            HEDFM.COLD_IN.name: c_tin,
+            HEDFM.COLD_OUT.name: c_tout,
             HEDFM.DT.name: dtln,
             HEDFM.U.name: u,
             HEDFM.F.name: f,
@@ -532,12 +564,36 @@ class Setup(QObject):
         }
 
         design = design.append(new_row, ignore_index=True)
+        if des_type == 'abv':
+            self.design_above = design
+        else:
+            self.design_below = design
+
+    def delete_exchanger(self, ex_id: str, des_type: str) -> None:
+        # input sanitation
+        if des_type == 'abv':
+            design = self.design_above
+        elif des_type == 'blw':
+            design = self.design_below
+        else:
+            raise ValueError("Invalid design choice.")
+
+        design = design.set_index(HEDFM.ID.name)
+        design = design.drop(labels=ex_id, axis='index')
+        design = design.reset_index(drop=False)
+
+        if des_type == 'abv':
+            self.design_above = design
+        else:
+            self.design_below = design
 
     def load(self, filename: str) -> None:
         check_file_exists(filename)
 
         with open(filename, 'r') as fp:
             hsd = json.load(fp)
+
+        # ------------------------------ Streams ------------------------------
         hot = pd.DataFrame(hsd['hot'])
         hot = hot.astype(
             {key: float if key != STFM.ID.name else object
@@ -551,6 +607,8 @@ class Setup(QObject):
              for key in STFM.columns()}
         )
         cold.index = cold.index.astype(int)
+
+        # ------------------------------- Films -------------------------------
 
         hot_film = pd.DataFrame(hsd['hot_film'])
         hot_film = hot_film.astype(
@@ -566,6 +624,23 @@ class Setup(QObject):
         )
         cold_film.index = cold_film.index.astype(int)
 
+        # ------------------------------ Designs ------------------------------
+        design_above = pd.DataFrame(hsd['design_above'])
+        design_above = design_above.astype(
+            {key: float if key not in HEDFM_STR_COLS else object
+             for key in HEDFM.columns()}
+        )
+        design_above.index = design_above.index.astype(int)
+
+        design_below = pd.DataFrame(hsd['design_below'])
+        design_below = design_below.astype(
+            {key: float if key not in HEDFM_STR_COLS else object
+             for key in HEDFM.columns()}
+        )
+        design_below.index = design_below.index.astype(int)
+
+        # ---------------------------------------------------------------------
+
         self.blockSignals(True)
 
         self.hot = hot
@@ -578,13 +653,18 @@ class Setup(QObject):
         self.hot_film_coef = hot_film
         self.cold_film_coef = cold_film
 
+        self.design_above = design_above
+        self.design_below = design_below
+
     def save(self, filename: str) -> None:
         dump = {
             'dt': self.dt,
             'hot': self.hot.to_dict(),
             'cold': self.cold.to_dict(),
             'hot_film': self.hot_film_coef.to_dict(),
-            'cold_film': self.cold_film_coef.to_dict()
+            'cold_film': self.cold_film_coef.to_dict(),
+            'design_above': self.design_above.to_dict(),
+            'design_below': self.design_below.to_dict()
         }
 
         with open(filename, 'w') as fp:

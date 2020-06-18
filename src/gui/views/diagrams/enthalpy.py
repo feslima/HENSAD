@@ -3,14 +3,9 @@ from matplotlib.backends.backend_qt5agg import (FigureCanvasQTAgg,
                                                 NavigationToolbar2QT)
 from matplotlib.figure import Figure
 from PyQt5.QtCore import Qt
-from PyQt5.QtWidgets import QApplication, QDialog, QVBoxLayout, QSlider
+from PyQt5.QtWidgets import QApplication, QDialog, QSlider, QVBoxLayout
 
-from gui.models.core import (HeatFlowFrameMapper, Setup, StreamFrameMapper,
-                             SummaryFrameMapper)
-
-STFM = StreamFrameMapper
-SFM = SummaryFrameMapper
-HFM = HeatFlowFrameMapper
+from gui.models.core import HFM, SFM, STFM, Setup
 
 
 class CompositeEnthalpyDialog(QDialog):

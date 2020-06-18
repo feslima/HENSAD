@@ -51,6 +51,10 @@ class HeatExchangerDesignFrameMapper(FrameColumnMapperEnum):
     SOURCE = 'Stream Source'
     DEST = 'Stream Destination'
     TYPE = 'Exchanger Type'
+    HOT_IN = 'Hot Stream Inlet'
+    HOT_OUT = 'Hot Stream Outlet'
+    COLD_IN = 'Cold Stream Inlet'
+    COLD_OUT = 'Cold Stream Outlet'
     DT = 'Delta T (lm)'
     U = 'Heat Transfer Coefficient'
     A = 'Exchange Area'
@@ -441,4 +445,9 @@ def calculate_log_mean_diff(ex_type: str, hot_in: float, hot_out: float,
     else:
         raise ValueError("Invalid approach type.")
 
-    return (DTA - DTB) / np.log(DTA / DTB)
+    if DTA == DTB:
+        LMTD = DTA
+    else:
+        LMTD = (DTA - DTB) / np.log(DTA / DTB)
+
+    return LMTD
