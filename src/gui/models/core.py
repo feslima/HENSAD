@@ -1,5 +1,6 @@
 import json
 import pathlib
+from typing import List
 
 import numpy as np
 import pandas as pd
@@ -7,23 +8,22 @@ from PyQt5.QtCore import QObject, pyqtSignal
 
 from hensad import (BaseUnits, FilmCoefficientsFrameMapper,
                     HeatExchangerDesignFrameMapper, HeatFlowFrameMapper,
-                    SIUnits, StreamFrameMapper, SummaryFrameMapper, USUnits,
-                    calculate_heat_flows, calculate_intervals,
-                    calculate_log_mean_diff, calculate_minimum_exchangers,
-                    calculate_pinch_utilities, calculate_summary_table,
-                    pinch_streams_tables)
-
-EMPTY_SUMMARY = pd.DataFrame(columns=SummaryFrameMapper.columns())
-EMPTY_STREAM = pd.DataFrame(columns=StreamFrameMapper.columns())
-EMPTY_HEATFLOW = pd.DataFrame(columns=HeatFlowFrameMapper.columns())
-EMPTY_EXDES = pd.DataFrame(columns=HeatExchangerDesignFrameMapper.columns())
-EMPTY_COEFS = pd.DataFrame(columns=FilmCoefficientsFrameMapper.columns())
+                    SegmentsFrameMapper, SIUnits,
+                    StreamFilmCoefficientFrameMapper, StreamFrameMapper,
+                    SummaryFrameMapper, USUnits, calculate_composite_enthalpy,
+                    calculate_exchanger_area, calculate_heat_flows,
+                    calculate_intervals, calculate_log_mean_diff,
+                    calculate_minimum_exchangers, calculate_number_of_shells,
+                    calculate_pinch_utilities, calculate_segments_data,
+                    calculate_summary_table, pinch_streams_tables)
 
 STFM = StreamFrameMapper
 SFM = SummaryFrameMapper
 HFM = HeatFlowFrameMapper
 HEDFM = HeatExchangerDesignFrameMapper
 FCFM = FilmCoefficientsFrameMapper
+STFCFM = StreamFilmCoefficientFrameMapper
+SEGFM = SegmentsFrameMapper
 
 HEDFM_STR_COLS = [
     HEDFM.ID.name,
@@ -32,6 +32,15 @@ HEDFM_STR_COLS = [
     HEDFM.DEST.name,
     HEDFM.TYPE.name
 ]
+
+EMPTY_SUMMARY = pd.DataFrame(columns=SFM.columns())
+EMPTY_STREAM = pd.DataFrame(columns=STFM.columns())
+EMPTY_COMPOSITE = pd.DataFrame(columns=['Q', 'T'], dtype=float)
+EMPTY_SEGMENT = pd.DataFrame(columns=SEGFM.columns())
+EMPTY_HEATFLOW = pd.DataFrame(columns=HFM.columns())
+EMPTY_EXDES = pd.DataFrame(columns=HEDFM.columns())
+EMPTY_COEFS = pd.DataFrame(columns=FCFM.columns())
+EMPTY_STREAM_COEFS = pd.DataFrame(columns=STFCFM.columns())
 
 
 class Setup(QObject):
@@ -163,31 +172,51 @@ class Setup(QObject):
         return self._cold_util_req
 
     @property
+    def hot_composite_data(self) -> pd.DataFrame:
+        """Hot streams composite enthalpy curve data."""
+        return self._hot_composite_data
+
+    @property
+    def cold_composite_data(self) -> pd.DataFrame:
+        """Cold streams composite enthalpy curve data."""
+        return self._cold_composite_data
+
+    @property
+    def composite_segments_data(self) -> pd.DataFrame:
+        """Composite enthalpy segment data."""
+        return self._composite_segments_data
+
+    @property
+    def area_network(self) -> float:
+        """Heat exchanger network total area estimate"""
+        return self._area_network
+
+    @property
     def hot_above(self) -> pd.DataFrame:
         """Hot side streams information table above the pinch."""
         if not hasattr(self, '_hot_above'):
-            self._hot_above = EMPTY_STREAM.copy(deep=True)
+            self._hot_above = EMPTY_STREAM_COEFS.copy(deep=True)
         return self._hot_above
 
     @property
     def cold_above(self) -> pd.DataFrame:
         """Cold side streams information table above the pinch."""
         if not hasattr(self, '_cold_above'):
-            self._cold_above = EMPTY_STREAM.copy(deep=True)
+            self._cold_above = EMPTY_STREAM_COEFS.copy(deep=True)
         return self._cold_above
 
     @property
     def hot_below(self) -> pd.DataFrame:
         """Hot side streams information table below the pinch."""
         if not hasattr(self, '_hot_below'):
-            self._hot_below = EMPTY_STREAM.copy(deep=True)
+            self._hot_below = EMPTY_STREAM_COEFS.copy(deep=True)
         return self._hot_below
 
     @property
     def cold_below(self) -> pd.DataFrame:
         """Cold side streams information table below the pinch."""
         if not hasattr(self, '_cold_below'):
-            self._cold_below = EMPTY_STREAM.copy(deep=True)
+            self._cold_below = EMPTY_STREAM_COEFS.copy(deep=True)
         return self._cold_below
 
     @property
@@ -321,6 +350,14 @@ class Setup(QObject):
             # set pinch and utilities (no pinch)
             pinch, hur, cur = (np.NaN, 0.0, 0.0)
 
+            # composite enthalpy curves
+            hTQ = EMPTY_COMPOSITE.copy(deep=True)
+            cTQ = EMPTY_COMPOSITE.copy(deep=True)
+            segments = EMPTY_SEGMENT.copy(deep=True)
+
+            # network area
+            area_network = np.NaN
+
             # clear the summary and pinch stream infos
             summary = EMPTY_SUMMARY.copy(deep=True)
             ha = EMPTY_STREAM.copy(deep=True)
@@ -340,9 +377,28 @@ class Setup(QObject):
             # set pinch and utilities
             pinch, hur, cur = calculate_pinch_utilities(summary)
 
+            # composite enthalpy curves
+            hTQ, cTQ = calculate_composite_enthalpy(
+                self.hot, self.cold, self.dt,
+                hur, cur, self.hot_film_coef, self.cold_film_coef,
+                summary
+            )
+
+            segments = calculate_segments_data(
+                self.hot, self.cold, self.dt,
+                hTQ, cTQ, self.hot_film_coef, self.cold_film_coef,
+                summary
+            )
+
+            # network area
+            area_network = (segments[SEGFM.SUM_QH.name]
+                            / (segments[SEGFM.DTLN.name] * 0.8)).sum()
+
             # pinch stream infos
             ha, ca, hb, cb = pinch_streams_tables(self.hot, self.cold,
-                                                  self.dt, pinch)
+                                                  self.dt, pinch,
+                                                  self.hot_film_coef,
+                                                  self.cold_film_coef)
 
             # heat flow info
             hf = calculate_heat_flows(summary)
@@ -353,6 +409,12 @@ class Setup(QObject):
         self._pinch = pinch
         self._hot_util_req = hur
         self._cold_util_req = cur
+
+        self._hot_composite_data = hTQ
+        self._cold_composite_data = cTQ
+        self._composite_segments_data = segments
+
+        self._area_network = area_network
 
         self._hot_above = ha
         self._cold_above = ca
@@ -368,6 +430,10 @@ class Setup(QObject):
         self._below_min_exchangers = calculate_minimum_exchangers(
             self.hot_below, self.cold_below, 'below'
         )
+
+        # reset the exchangers designs
+        self._design_above = EMPTY_EXDES.copy(deep=True)
+        self._design_below = EMPTY_EXDES.copy(deep=True)
 
     def add_stream(self, typ: str) -> None:
         if typ == 'hot':
@@ -428,11 +494,80 @@ class Setup(QObject):
             cold_film.reset_index(drop=True, inplace=True)
             self.cold_film_coef = cold_film
 
+    def split_stream(self, des_type: str, stream_type: str, stream_id: str,
+                     flowrates: List[float]) -> None:
+        if des_type == 'abv':
+            if stream_type == 'hot':
+                streams_df = self.hot_above
+            else:
+                streams_df = self.cold_above
+
+        else:
+            if stream_type == 'hot':
+                streams_df = self.hot_below
+            else:
+                streams_df = self.cold_below
+
+        if stream_id not in streams_df[STFCFM.ID.name].values:
+            raise KeyError("Stream ID '{0}' not found.")
+
+        flowrates = np.array(flowrates).astype(float)
+
+        streams_df = streams_df.set_index(STFCFM.ID.name)
+        stream = streams_df.loc[stream_id, :]
+        flow = stream[STFCFM.FLOW.name]
+        sum_flow = flowrates.sum()
+        if sum_flow != flow:
+            raise ValueError("Sum of specified flowrates must be equal to the "
+                             "total flowrate.")
+        new_streams = []
+        for i, flow in enumerate(flowrates):
+            new_str = stream.copy(deep=True).rename()
+            new_stream_id = stream_id + '_' + chr(ord('A') + i)
+            new_str[STFCFM.ID.name] = new_stream_id
+            new_str[STFCFM.FLOW.name] = flow
+            new_streams.append(new_str)
+
+        # delete the stream pre split
+        streams_df = streams_df.drop(labels=stream_id).reset_index()
+
+        # generate the new splits
+        new_streams = pd.concat(
+            new_streams, axis='columns', ignore_index=True
+        ).transpose()[STFCFM.columns()]
+
+        # concatenate new streams into the current df
+        new_streams = pd.concat(
+            [streams_df, new_streams], axis='index', ignore_index=True
+        )
+
+        # convert the columns data types
+        new_streams = new_streams.astype(
+            {key: float if key != STFCFM.ID.name else object
+             for key in STFCFM.columns()}
+        )
+
+        if des_type == 'abv':
+            if stream_type == 'hot':
+                self._hot_above = new_streams
+            else:
+                self._cold_above = new_streams
+
+        else:
+            if stream_type == 'hot':
+                self._hot_below = new_streams
+            else:
+                self._cold_below = new_streams
+
+        # reset the exchangers designs
+        self._design_above = EMPTY_EXDES.copy(deep=True)
+        self._design_below = EMPTY_EXDES.copy(deep=True)
+
     def add_exchanger(self, des_type: str, ex_id: str, duty: float,
                       interval: str, stream_source: str,
                       stream_dest: str) -> None:
-        """Adds a single exchanger on the specified design type (above or
-        below the pinch).
+        """Adds a single process exchanger on the specified design type
+        (above or below the pinch).
 
         Parameters
         ----------
@@ -454,12 +589,19 @@ class Setup(QObject):
             hot_df = self.hot_above
             cold_df = self.cold_above
             design = self.design_above
+            allowed_ex = self.above_min_exchangers
         elif des_type == 'blw':
             hot_df = self.hot_below
             cold_df = self.cold_below
             design = self.design_below
+            allowed_ex = self.below_min_exchangers
         else:
             raise ValueError("Invalid design choice.")
+
+        if len(design) >= allowed_ex:
+            raise ValueError(
+                "Maximum number of exchangers is {0}".format(allowed_ex)
+            )
 
         # check if the input film coefficients are available
         if self.hot_film_coef.empty or self.cold_film_coef.empty or \
@@ -479,49 +621,89 @@ class Setup(QObject):
             raise KeyError("Stream {0} not found.".format(stream_dest))
 
         hot_stream_info = hot_df.loc[hot_df[STFM.ID.name] == stream_source, :]
-        h_tin = hot_stream_info[STFM.TIN.name].item()
-
-        if stream_source in design[HEDFM.SOURCE.name].values:
-            h_tout = design.loc[
-                design[HEDFM.SOURCE.name] == stream_source, HEDFM.HOT_IN.name
-            ].max()
-        else:
-            h_tout = hot_stream_info[STFM.TOUT.name].item()
+        cold_stream_info = cold_df.loc[cold_df[STFM.ID.name] == stream_dest, :]
 
         h_cp = hot_stream_info[STFM.CP.name].item()
         h_mf = hot_stream_info[STFM.FLOW.name].item()
 
-        cold_stream_info = cold_df.loc[cold_df[STFM.ID.name] == stream_dest, :]
-        if stream_dest in design[HEDFM.DEST.name].values:
-            c_tin = design.loc[
-                design[HEDFM.DEST.name] == stream_dest, HEDFM.COLD_OUT.name
-            ].max()
-        else:
-            c_tin = cold_stream_info[STFM.TIN.name].item()
-
-        c_tout = cold_stream_info[STFM.TOUT.name].item()
         c_cp = cold_stream_info[STFM.CP.name].item()
         c_mf = cold_stream_info[STFM.FLOW.name].item()
+
+        # heat transfer coefficient
+        hot_coef = hot_df.loc[
+            hot_df[STFCFM.ID.name] == stream_source,
+            STFCFM.COEF.name
+        ].item()
+        cold_coef = cold_df.loc[
+            cold_df[STFCFM.ID.name] == stream_dest,
+            STFCFM.COEF.name
+        ].item()
+
+        if des_type == 'abv':
+            # design above: calculate h_tin and c_tout
+            h_tin = hot_stream_info[STFM.TIN.name].item()
+
+            if stream_source in design[HEDFM.SOURCE.name].values:
+                h_tout = design.loc[
+                    design[HEDFM.SOURCE.name] == stream_source,
+                    HEDFM.HOT_IN.name
+                ].max()
+            else:
+                h_tout = hot_stream_info[STFM.TOUT.name].item()
+
+            c_tout = cold_stream_info[STFM.TOUT.name].item()
+
+            if stream_dest in design[HEDFM.DEST.name].values:
+                c_tin = design.loc[
+                    design[HEDFM.DEST.name] == stream_dest,
+                    HEDFM.COLD_OUT.name
+                ].max()
+            else:
+                c_tin = cold_stream_info[STFM.TIN.name].item()
+
+        else:
+            # design below: calculate h_tout and c_tin
+            h_tout = hot_stream_info[STFM.TOUT.name].item()
+
+            if stream_source in design[HEDFM.SOURCE.name].values:
+                h_tin = design.loc[
+                    design[HEDFM.SOURCE.name] == stream_source,
+                    HEDFM.HOT_OUT.name
+                ].max()
+            else:
+                h_tin = hot_stream_info[STFM.TIN.name].item()
+
+            c_tin = cold_stream_info[STFM.TIN.name].item()
+
+            if stream_dest in design[HEDFM.DEST.name].values:
+                c_tout = design.loc[
+                    design[HEDFM.DEST.name] == stream_dest,
+                    HEDFM.COLD_IN.name
+                ].max()
+            else:
+                c_tout = cold_stream_info[STFM.TOUT.name].item()
 
         # check duty with stream heat capacities calculate outlet temperatures
         if duty > np.abs((h_mf * h_cp) * (h_tin - h_tout)).item():
             raise ValueError("The specified heat duty is not feasible for the "
                              "hot stream.")
         else:
-            h_tin = h_tout + duty / (h_mf * h_cp)
+            if des_type == 'abv':
+                h_tin = h_tout + duty / (h_mf * h_cp)
+            else:
+                h_tout = h_tin - duty / (h_mf * h_cp)
 
         if duty > np.abs((c_mf * c_cp) * (c_tout - c_tin)).item():
             raise ValueError("The specified heat duty is not feasible for the "
                              "cold stream.")
         else:
-            c_tout = c_tin + duty / (c_mf * c_cp)
-
-        # log mean correction factor
-        f = 0.8
+            if des_type == 'abv':
+                c_tout = c_tin + duty / (c_mf * c_cp)
+            else:
+                c_tin = c_tout - duty / (c_mf * c_cp)
 
         # log mean temp
-        ex_type = 'counter'
-        dtln = calculate_log_mean_diff(ex_type, h_tin, h_tout, c_tin, c_tout)
+        dtln = calculate_log_mean_diff('counter', h_tin, h_tout, c_tin, c_tout)
 
         # check if the calculated log mean violates the minimun approach
         if dtln < self.dt:
@@ -531,19 +713,31 @@ class Setup(QObject):
                        "Minimum approach = {1}").format(dtln, self.dt)
             raise ValueError(err_msg)
 
-        # heat transfer coefficient
-        hot_coef = self.hot_film_coef.loc[
-            self.hot_film_coef[FCFM.ID.name] == stream_source,
-            FCFM.COEF.name
-        ].item()
-        cold_coef = self.cold_film_coef.loc[
-            self.cold_film_coef[FCFM.ID.name] == stream_dest,
-            FCFM.COEF.name
-        ].item()
-        u = 1 / (1 / hot_coef + 1 / cold_coef)
+        # exchanger type
+        ex_type = '1-2 S&T'  # default exchanger, for now
 
-        # exchanger area
-        a = duty / (u * dtln * f)
+        # log mean correction factor
+        f = 0.8
+
+        # area and overall heat coefficient
+        a, u = calculate_exchanger_area(duty, dtln, hot_coef, cold_coef, f)
+
+        # number of shells
+        h_str = {
+            STFM.ID.name: stream_source,
+            STFM.FLOW.name: h_mf,
+            STFM.CP.name: h_cp,
+            STFM.TIN.name: h_tin,
+            STFM.TOUT.name: h_tout
+        }
+        c_str = {
+            STFM.ID.name: stream_dest,
+            STFM.FLOW.name: c_mf,
+            STFM.CP.name: c_cp,
+            STFM.TIN.name: c_tin,
+            STFM.TOUT.name: c_tout
+        }
+        n_shells = calculate_number_of_shells(h_str, c_str)
 
         # store the exchanger data
         new_row = {
@@ -560,7 +754,8 @@ class Setup(QObject):
             HEDFM.DT.name: dtln,
             HEDFM.U.name: u,
             HEDFM.F.name: f,
-            HEDFM.A.name: a
+            HEDFM.A.name: a,
+            HEDFM.NSHELL.name: n_shells
         }
 
         design = design.append(new_row, ignore_index=True)
@@ -648,10 +843,10 @@ class Setup(QObject):
 
         self.blockSignals(False)
 
-        self.dt = hsd['dt']
-
         self.hot_film_coef = hot_film
         self.cold_film_coef = cold_film
+
+        self.dt = hsd['dt']
 
         self.design_above = design_above
         self.design_below = design_below

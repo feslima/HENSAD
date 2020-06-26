@@ -58,6 +58,7 @@ class HeatExchangerDesignFrameMapper(FrameColumnMapperEnum):
     DT = 'Delta T (lm)'
     U = 'Heat Transfer Coefficient'
     A = 'Exchange Area'
+    NSHELL = 'Shell Passes'
     F = 'Correction Factor'
 
 
@@ -65,6 +66,27 @@ class HeatExchangerDesignFrameMapper(FrameColumnMapperEnum):
 class FilmCoefficientsFrameMapper(FrameColumnMapperEnum):
     ID = 'Stream ID'
     COEF = 'Film Heat Transfer Coefficient'
+
+
+@unique
+class StreamFilmCoefficientFrameMapper(FrameColumnMapperEnum):
+    ID = 'Stream ID'
+    FLOW = 'Mass flow rate'
+    CP = 'Specific Heat Capacity'
+    TIN = 'Inlet Temperature'
+    TOUT = 'Outlet Temperature'
+    COEF = 'Film Heat Transfer Coefficient'
+
+
+@unique
+class SegmentsFrameMapper(FrameColumnMapperEnum):
+    HOT_IN = 'Hot Inlet'
+    HOT_OUT = 'Hot Outlet'
+    COLD_IN = 'Cold Inlet'
+    COLD_OUT = 'Cold Outlet'
+    DTLN = 'Log Mean Temperature Difference'
+    Q = 'Interval Enthalpy'
+    SUM_QH = 'Sum of Enthalpy - Coefficient ratio'
 
 
 class BaseUnits(ABC):
@@ -316,14 +338,16 @@ def calculate_pinch_utilities(
 
 def pinch_streams_tables(
     hot: pd.DataFrame, cold: pd.DataFrame,
-    dt: float, pinch: float
+    dt: float, pinch: float, hot_film: pd.DataFrame, cold_film: pd.DataFrame
 ) -> Tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame, pd.DataFrame]:
     # INDEXES ARE NOT RESETTED!
     SFM = SummaryFrameMapper
     STFM = StreamFrameMapper
+    FCFM = FilmCoefficientsFrameMapper
+    STFCFM = StreamFilmCoefficientFrameMapper
     if np.isnan(pinch):
         # no pinch
-        empty_frame = pd.DataFrame(columns=STFM.columns())
+        empty_frame = pd.DataFrame(columns=STFCFM.columns())
 
         hot_above = hot.copy(deep=True)
         cold_above = cold.copy(deep=True)
@@ -346,10 +370,18 @@ def pinch_streams_tables(
             STFM.TOUT.name
         ] = pinch  # cap hot outlet at pinch
 
+        hot_above = hot_above.set_index(STFM.ID.name).join(
+            hot_film.set_index(FCFM.ID.name)
+        ).reset_index()  # append the film coefficients
+
         cold_above.loc[
             cold_above[STFM.TIN.name] < (pinch - dt),
             STFM.TIN.name
         ] = (pinch - dt)  # cap cold inlet at pinch
+
+        cold_above = cold_above.set_index(STFM.ID.name).join(
+            cold_film.set_index(FCFM.ID.name)
+        ).reset_index()  # append the film coefficients
 
         # below section
         index_hot_blw = hot[STFM.TOUT.name] < pinch
@@ -363,10 +395,18 @@ def pinch_streams_tables(
             STFM.TIN.name
         ] = pinch  # cap hot inlet at pinch
 
+        hot_below = hot_below.set_index(STFM.ID.name).join(
+            hot_film.set_index(FCFM.ID.name)
+        ).reset_index()  # append the film coefficients
+
         cold_below.loc[
             cold_below[STFM.TOUT.name] >= (pinch - dt),
             STFM.TOUT.name
         ] = (pinch - dt)  # cap cold outlet at pinch
+
+        cold_below = cold_below.set_index(STFM.ID.name).join(
+            cold_film.set_index(FCFM.ID.name)
+        ).reset_index()  # append the film coefficients
 
     return hot_above, cold_above, hot_below, cold_below
 
@@ -451,3 +491,439 @@ def calculate_log_mean_diff(ex_type: str, hot_in: float, hot_out: float,
         LMTD = (DTA - DTB) / np.log(DTA / DTB)
 
     return LMTD
+
+
+class Stream(TypedDict):
+    ID: str
+    FLOW: float
+    CP: float
+    TIN: float
+    TOUT: float
+
+
+def calculate_number_of_shells(
+    hot: Stream, cold: Stream
+) -> int:
+    """Get the number of sheels for a 1-2 S&T heat exchanger.
+
+    Parameters
+    ----------
+    hot : Stream
+        Hot side stream.
+    cold : Stream
+        Cold side stream.
+
+    Returns
+    -------
+    int
+        Number of shells.
+    """
+    R = (cold['FLOW'] * cold['CP']) / (hot['FLOW'] * hot['CP'])
+
+    tc_in = cold['TIN']
+    tc_out = cold['TOUT']
+    th_in = hot['TIN']
+    th_out = hot['TOUT']
+    P = (tc_out - tc_in) / (th_in - tc_in)
+
+    if R != 1.0:
+        n_shells = np.log((1 - P * R) / (1 - P)) / np.log(1 / R)
+    else:
+        n_shells = P / (1 - P)
+
+    return np.ceil(n_shells).item()
+
+
+def calculate_exchanger_area(
+    duty: float, dtln: float, hot_coefs: List[float],
+    cold_coefs: List[float], factor: float
+) -> Tuple[float, float]:
+    """Calculates the exchanger area and overall heat transfer coefficient.
+
+    Parameters
+    ----------
+    duty : float
+        Heat exchanger duty.
+    dtln : float
+        Log mean temperature difference.
+    hot_coefs : List[float]
+        Hot side heat transfer film coefficients.
+    cold_coefs : List[float]
+        Cold side heat transfer film coefficients.
+    factor : float
+        Correction factor.
+
+    Returns
+    -------
+    Tuple[float, float]
+        Tuple of two elements. First one is the exchanger area. The second is
+        the overall heat transfer coefficient.
+    """
+    u = 1 / (1 / np.array(hot_coefs) + 1 / np.array(cold_coefs)).sum()
+    a = duty * 1e3 / (u * dtln * factor)
+
+    return a, u
+
+
+def calculate_composite_enthalpy(
+        hot: pd.DataFrame, cold: pd.DataFrame,
+        dt: float, huq: float, cuq: float,
+        hot_coefs: pd.DataFrame, cold_coefs: pd.DataFrame,
+        summary: pd.DataFrame) -> Tuple[pd.DataFrame, pd.DataFrame]:
+    """Calculates the composite enthalpy data for curve plots.
+
+    Parameters
+    ----------
+    hot : pd.DataFrame
+        Hot stream info.
+    cold : pd.DataFrame
+        Cold stream info.
+    dt : float
+        Minimum approach temperature difference.
+    huq : float
+        Hot utility requirement.
+    cuq : float
+        Cold utility requirement.
+    hot_coefs : pd.DataFrame
+        Hot streams film coefficients.
+    cold_coefs : pd.DataFrame
+        Cold streams film coefficients.
+
+    Returns
+    -------
+    Tuple[pd.DataFrame, pd.DataFrame]
+        Tuple of two elements. The first is hot streams composite curve. The
+        second is the cold streams curve.
+    """
+    SFM = SummaryFrameMapper
+    STFM = StreamFrameMapper
+
+    hTQ = pd.DataFrame(columns=['Q', 'T'], dtype=float)
+    cTQ = pd.DataFrame(columns=['Q', 'T'], dtype=float)
+
+    hs = summary.sort_values(
+        by=SFM.TIN.name, ascending=True, ignore_index=True
+    )
+
+    # cumulative heats
+    hcumq = 0.0
+    ccumq = cuq
+
+    for i in range(hs.shape[0]):
+        htout = hs.at[i, SFM.TOUT.name]
+        htin = hs.at[i, SFM.TIN.name]
+        ctout = htout - dt
+        ctin = htin - dt
+
+        hTQ.at[i, 'T'] = htout
+        hTQ.at[i + 1, 'T'] = htin
+        cTQ.at[i, 'T'] = ctout
+        cTQ.at[i + 1, 'T'] = ctin
+
+        hTQ.at[i, 'Q'] = hcumq
+        cTQ.at[i, 'Q'] = ccumq
+
+        for s in hs.at[i, SFM.HOTSTRIDX.name]:
+            hcumq += hot.at[s, STFM.FLOW.name] * \
+                hot.at[s, STFM.CP.name] * (htin - htout)
+
+        for s in hs.at[i, SFM.COLDSTRIDX.name]:
+            ccumq += cold.at[s, STFM.FLOW.name] * \
+                cold.at[s, STFM.CP.name] * (ctin - ctout)
+
+        hTQ.at[i + 1, 'Q'] = hcumq
+        cTQ.at[i + 1, 'Q'] = ccumq
+
+    return hTQ, cTQ
+
+
+def _search_enthalpy_interval(
+    Q: float, composite: pd.DataFrame
+) -> Tuple[float, float, float, float]:
+    """For a given enthalpy 'Q', search the interval
+    values of 'composite' that contains the 'Q' value.
+
+    Parameters
+    ----------
+    Q : float
+        Enthalpy value.
+    composite: pd.DataFrame
+        Composite enthalpy curves to be searched.
+
+    Returns
+    -------
+    Tuple[float, float, float, float]
+        The linear interval that contains the initial and final values of 
+        enthalpy and temperature. Tuple of four elements with the order as:
+        lower enthalpy, lower temperature, upper enthalpy, upper temperature.
+
+    Notes
+    -----
+    If the enthalpy value 'Q' is not present in the 'composite' curve, the 
+    function will return a tuple of all NaNs.
+    """
+    qlb, tlb, qub, tub = np.nan, np.nan, np.nan, np.nan
+
+    for i in range(len(composite) - 1):
+        lb = composite.at[i, 'Q']
+        ub = composite.at[i + 1, 'Q']
+
+        if lb <= Q <= ub and not np.isclose(lb, ub):
+            qlb = lb
+            qub = ub
+            tlb = composite.at[i, 'T']
+            tub = composite.at[i + 1, 'T']
+            break
+
+    return qlb, tlb, qub, tub
+
+
+def _interpolate_temperature_in_interval(
+    Q: float, Qi: float, Ti: float, Qf: float, Tf: float
+) -> float:
+    """Interpolate the enthalpy 'Q' value to find its corresponding temperature
+    in the interval delimited by ['Qi', 'Ti'] and ['Qf', 'Tf']self.
+
+    Parameters
+    ----------
+    Q : float
+        Enthalpy value to be linearly interpolatedself.
+    Qi : float
+        Initial value of enthalpy interval.
+    Ti : float
+        Initial value of temperature interval.
+    Qf : float
+        Final value of enthalpy interval.
+    Tf : float
+        Final value of temperature interval.
+
+    Returns
+    -------
+    float
+        The resulting interpolated temperature from 'Q'.
+    """
+    # Temperature = A * Enthalpy + b
+    enthalpy = np.array([[Qf, 1.0], [Qi, 1.0]])
+    temperature = np.array([Tf, Ti])
+
+    A, b = np.linalg.solve(enthalpy, temperature)
+
+    return A * Q + b
+
+
+def _build_composite_borders(hot_composite: pd.DataFrame,
+                             cold_composite: pd.DataFrame) -> pd.DataFrame:
+    """Builds the vertical borders of the composite enthalpy diagram. The
+    borders can be clearly visualized in Fig E15.5 of Analysis, Synthesis and
+    Design of Chemical Processes (Third Edition).
+
+    Parameters
+    ----------
+    hot_composite : pd.DataFrame
+        Hot streams composite enthalpy curve.
+    cold_composite : pd.DataFrame
+        Cold streams composite enthalpy curve.
+
+    Returns
+    -------
+    pd.DataFrame
+        Values of temperature and enthalpy of each segment border.
+    """
+    hTQ = hot_composite
+    cTQ = cold_composite
+
+    # a border is defined as a single vertical line at a Q value
+    borders = pd.DataFrame(columns=['hot', 'cold', 'Q'])
+
+    for i in range(len(cTQ)):
+        # each iteration we determine two borders
+        cQ, cT = cTQ.loc[i, ['Q', 'T']]
+        hQ, hT = hTQ.loc[i, ['Q', 'T']]
+
+        if i == 0:
+            # first border
+            # temperatures of first border of iteration
+            tH1 = hT
+            tC1 = np.NaN
+
+            # temperatures of second border of iteration
+            Qi, Ti, Qf, Tf = _search_enthalpy_interval(cQ, hTQ)
+            tH2 = _interpolate_temperature_in_interval(cQ, Qi, Ti, Qf, Tf)
+            tC2 = cT
+
+        elif i == (len(cTQ) - 1):
+            # last border
+            tH1 = hT
+            Qi, Ti, Qf, Tf = _search_enthalpy_interval(hQ, cTQ)
+            tC1 = _interpolate_temperature_in_interval(hQ, Qi, Ti, Qf, Tf)
+
+            tH2 = np.NaN
+            tC2 = cT
+
+        else:
+            # middle borders
+            tH1 = _interpolate_temperature_in_interval(
+                hQ, *_search_enthalpy_interval(hQ, hTQ)
+            )
+            tC1 = _interpolate_temperature_in_interval(
+                hQ, *_search_enthalpy_interval(hQ, cTQ)
+            )
+            tH2 = _interpolate_temperature_in_interval(
+                cQ, *_search_enthalpy_interval(cQ, hTQ)
+            )
+            tC2 = _interpolate_temperature_in_interval(
+                cQ, *_search_enthalpy_interval(cQ, cTQ)
+            )
+
+        borders = borders.append([
+            {'hot': tH1, 'cold': tC1, 'Q': hQ},
+            {'hot': tH2, 'cold': tC2, 'Q': cQ}
+        ], ignore_index=True)
+
+    # if there is a pinch, a duplicated border (row) will appear. Drop them
+    borders.drop_duplicates(ignore_index=True, inplace=True)
+
+    # sort by enthalpy value to ensure correct order of borders
+    borders.sort_values(by='Q', inplace=True, ignore_index=True)
+    return borders
+
+
+def _find_streams_in_interval(
+    t1: float, t2: float, summary: pd.DataFrame, dt: float = None
+) -> int:
+    SFM = SummaryFrameMapper
+    STFM = StreamFrameMapper
+
+    if dt is None:
+        # this means that we want the hot streams
+        dt = 0.0  # do not change from hot to cold
+        STRIDX = SFM.HOTSTRIDX.name
+
+    else:
+        STRIDX = SFM.COLDSTRIDX.name
+
+    int_out = summary[SFM.TOUT.name] - dt
+    int_in = summary[SFM.TIN.name] - dt
+
+    start_index = summary.index[
+        np.logical_and(int_in > t1, t1 >= int_out)
+    ].values.item()
+    end_index = summary.index[
+        np.logical_and(int_in >= t2, t2 > int_out)
+    ].values.item()
+
+    # get unique indexes of streams
+    indexes = np.unique(
+        np.concatenate(
+            summary.loc[start_index:end_index, STRIDX].values
+        ).ravel().astype(int)
+    ).tolist()
+
+    return indexes
+
+
+def calculate_segments_data(
+    hot: pd.DataFrame, cold: pd.DataFrame,
+    dt: float, hot_composite: pd.DataFrame, cold_composite: pd.DataFrame,
+    hot_coefs: pd.DataFrame, cold_coefs: pd.DataFrame, summary: pd.DataFrame
+) -> pd.DataFrame:
+    """Calculates the data needed to estimate the total area of a heat
+    exchanger network.
+
+    Parameters
+    ----------
+    hot : pd.DataFrame
+        Hot streams.
+    cold : pd.DataFrame
+        Cold streams.
+    dt : float
+        Minimum approach temperature difference.
+    hot_composite : pd.DataFrame
+        Hot streams composite enthalpy curve.
+    cold_composite : pd.DataFrame
+        Cold streams composite enthalpy curve.
+    hot_coefs : pd.DataFrame
+        Hot streams film coefficients.
+    cold_coefs : pd.DataFrame
+        Cold streams film coefficients.
+    summary : pd.DataFrame
+        Summary table of the temperature intervals.
+
+    Returns
+    -------
+    pd.DataFrame
+        Segment data to estimate heat exchanger network area.
+    """
+
+    SFM = SummaryFrameMapper
+    STFM = StreamFrameMapper
+    FCFM = FilmCoefficientsFrameMapper
+    SEGFM = SegmentsFrameMapper
+
+    stream_ids = hot.loc[:, STFM.ID.name].values.tolist() + \
+        cold.loc[:, STFM.ID.name].values.tolist()
+
+    segments = pd.DataFrame(columns=stream_ids + SEGFM.columns())
+
+    hTQ = hot_composite
+    cTQ = cold_composite
+
+    borders = _build_composite_borders(hTQ, cTQ)
+
+    for i in range(len(borders) - 1):
+        if borders.loc[i, ['hot', 'cold']].notna().all(axis=None) and \
+                borders.loc[i + 1, ['hot', 'cold']].notna().all(axis=None):
+            # fill the temperature intervals
+            hot_1 = borders.at[i, 'hot']
+            hot_2 = borders.at[i + 1, 'hot']
+            segments.at[i, SEGFM.HOT_IN.name] = hot_1
+            segments.at[i, SEGFM.HOT_OUT.name] = hot_2
+
+            cold_1 = borders.at[i, 'cold']
+            cold_2 = borders.at[i + 1, 'cold']
+            segments.at[i, SEGFM.COLD_IN.name] = cold_1
+            segments.at[i, SEGFM.COLD_OUT.name] = cold_2
+
+            segments.at[i, SEGFM.Q.name] = borders.at[i + 1, 'Q'] \
+                - borders.at[i, 'Q']
+
+            # log mean temperature
+            segments.at[i, SEGFM.DTLN.name] = calculate_log_mean_diff(
+                'co', hot_1, hot_2, cold_1, cold_2)
+
+            # get stream indexes
+            hot_idx = _find_streams_in_interval(hot_1, hot_2, summary)
+            cold_idx = _find_streams_in_interval(cold_1, cold_2, summary, dt)
+
+            # calculate stream enthalpies by interval
+            sum_Qh = 0.0
+            for idx in hot_idx:
+                stream = hot.at[idx, STFM.ID.name]
+                cp = hot.at[idx, STFM.CP.name]
+                mf = hot.at[idx, STFM.FLOW.name]
+                coef = hot_coefs.at[idx, FCFM.COEF.name] / 1000
+
+                Q = mf * cp * (hot_2 - hot_1)
+
+                sum_Qh += Q / coef
+
+                segments.at[i, stream] = Q
+
+            for idx in cold_idx:
+                stream = cold.at[idx, STFM.ID.name]
+                cp = cold.at[idx, STFM.CP.name]
+                mf = cold.at[idx, STFM.FLOW.name]
+                coef = cold_coefs.at[idx, FCFM.COEF.name] / 1000
+
+                Q = mf * cp * (cold_2 - cold_1)
+
+                sum_Qh += Q / coef
+
+                segments.at[i, stream] = Q
+
+            # insert ratio values
+            segments.at[i, SEGFM.SUM_QH.name] = sum_Qh
+
+    segments = segments.fillna(0.0)
+
+    return segments

@@ -46,48 +46,14 @@ class CompositeEnthalpyDialog(QDialog):
     def _plot_graph(self) -> None:
         self._figure.clear()
         ax = self._figure.add_subplot(111)
-        summary = self._setup.summary
 
-        hTQ = pd.DataFrame(columns=['Q', 'T'], dtype=float)
-        cTQ = pd.DataFrame(columns=['Q', 'T'], dtype=float)
+        hTQ = self._setup.hot_composite_data
+        cTQ = self._setup.cold_composite_data
 
-        hs = summary.sort_values(
-            by=SFM.TIN.name, ascending=True, ignore_index=True
-        )
-        cs = hs.copy(deep=True)
-
-        hcumq = 0.0
-        ccumq = self._setup.cold_util_req
-        hot = self._setup.hot
-        cold = self._setup.cold
         dt = self._setup.dt
-        for i in range(hs.shape[0]):
-            htout = hs.at[i, SFM.TOUT.name]
-            htin = hs.at[i, SFM.TIN.name]
-            ctout = htout - dt
-            ctin = htin - dt
 
-            hTQ.at[i, 'T'] = htout
-            hTQ.at[i + 1, 'T'] = htin
-            cTQ.at[i, 'T'] = ctout
-            cTQ.at[i + 1, 'T'] = ctin
-
-            hTQ.at[i, 'Q'] = hcumq
-            cTQ.at[i, 'Q'] = ccumq
-
-            for s in hs.at[i, SFM.HOTSTRIDX.name]:
-                hcumq += hot.at[s, STFM.FLOW.name] * \
-                    hot.at[s, STFM.CP.name] * (htin - htout)
-
-            for s in hs.at[i, SFM.COLDSTRIDX.name]:
-                ccumq += cold.at[s, STFM.FLOW.name] * \
-                    cold.at[s, STFM.CP.name] * (ctin - ctout)
-
-            hTQ.at[i + 1, 'Q'] = hcumq
-            cTQ.at[i + 1, 'Q'] = ccumq
-
-        ax.plot(hTQ['Q'], hTQ['T'], 'r', label='Hot')
-        ax.plot(cTQ['Q'], cTQ['T'], 'b', label='Cold')
+        ax.plot(hTQ['Q'], hTQ['T'], marker='s', color='r', label='Hot')
+        ax.plot(cTQ['Q'], cTQ['T'], marker='s', color='b', label='Cold')
         ax.legend()
         ax.set_xlabel('Q ({0})'.format(self._setup.units.power))
         ax.set_ylabel('T ({0})'.format(self._setup.units.temperature))

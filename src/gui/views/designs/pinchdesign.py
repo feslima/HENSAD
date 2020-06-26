@@ -1,8 +1,9 @@
 import numpy as np
 import pandas as pd
-from PyQt5.QtCore import QPointF, QRectF, QRegExp, QSize, QSizeF, Qt
+from PyQt5.QtCore import (QAbstractTableModel, QModelIndex, QPointF, QRectF,
+                          QRegExp, QSize, QSizeF, Qt, pyqtSignal)
 from PyQt5.QtGui import (QColor, QDoubleValidator, QFont, QFontMetrics, QIcon,
-                         QPainter, QPainterPath, QPen, QPixmap,
+                         QIntValidator, QPainter, QPainterPath, QPen, QPixmap,
                          QRegExpValidator, QResizeEvent, QShowEvent,
                          QTransform, QValidator)
 from PyQt5.QtWidgets import (QAction, QApplication, QComboBox, QDialog,
@@ -15,7 +16,7 @@ from PyQt5.QtWidgets import (QAction, QApplication, QComboBox, QDialog,
                              QMenu, QStyleOptionGraphicsItem, QTableView,
                              QVBoxLayout, QWidget)
 
-from gui.models.core import HEDFM, SFM, STFM, Setup
+from gui.models.core import HEDFM, SFM, STFCFM, STFM, Setup
 from gui.models.exchanger_table import ExchangerDesignTableModel
 from gui.resources import icons_rc
 from gui.views.common import ArrowItem
@@ -30,6 +31,31 @@ class NamedArrow(ArrowItem):
         self.name = name
         super().__init__(x1, y1, x2, y2, color=color, width=width,
                          parent=parent)
+
+    def _create_menu(self):
+        split_icon = QIcon()
+        self._split_action = QAction(
+            split_icon, "Split stream", self.scene()
+        )
+        self._split_action.triggered.connect(self._split_stream)
+        self.context_menu = QMenu()
+        self.context_menu.addAction(self._split_action)
+
+    def _split_stream(self):
+        scene = self.scene()
+        stream_type = 'hot' if type(self) == LiveArrowItem else 'cold'
+        stream_id = self.name
+        dialog = SplitStreamDialog(stream_id, stream_type, scene)
+        dialog.exec_()
+
+    def contextMenuEvent(self, event: QGraphicsSceneContextMenuEvent):
+        self.scene().clearSelection()
+        self.setSelected(True)
+
+        self._create_menu()
+
+        # call the context menu at the item position
+        self.context_menu.exec_(event.screenPos())
 
 
 class LiveArrowItem(NamedArrow):
@@ -73,7 +99,9 @@ class ExchangerItem(QGraphicsLineItem):
         del_icon.addPixmap(
             QPixmap(":/streams/delete_icon.svg"), QIcon.Normal, QIcon.Off
         )
-        self._delete_action = QAction(del_icon, "Delete item", self.scene())
+        self._delete_action = QAction(
+            del_icon, "Delete exchanger", self.scene()
+        )
         self._delete_action.triggered.connect(self._delete_exchanger)
 
     def _create_context_menu(self) -> None:
@@ -203,7 +231,8 @@ class PinchDesignDialog(QDialog):
         header.setSectionResizeMode(QHeaderView.Stretch)
 
         self.view = QGraphicsView(self)
-        self.scene = PinchDesignScene(self._setup, self.view)
+        self.scene = PinchDesignScene(self._design_type,
+                                      self._setup, self.view)
         self.view.setScene(self.scene)
 
         layout = QVBoxLayout()
@@ -236,7 +265,7 @@ class PinchDesignDialog(QDialog):
 
 
 class PinchDesignScene(QGraphicsScene):
-    def __init__(self, setup: Setup, parent: QGraphicsView):
+    def __init__(self, des_type: str, setup: Setup, parent: QGraphicsView):
         super().__init__(0.0, 0.0, 1024.0, 800.0, parent=parent)
         # ----------------------------- settings ------------------------------
         # padding for drawing area
@@ -249,7 +278,7 @@ class PinchDesignScene(QGraphicsScene):
         self._axis_width = 50
 
         # ------------------------ internal variables -------------------------
-        self._des_type = 'abv'
+        self._des_type = des_type
         self._setup = setup
         self._hot_strm_arrows = pd.Series()  # cataloguer of hot side arrows
         self._cold_strm_arrows = pd.Series()  # cataloguer of cold side arrows
@@ -258,10 +287,12 @@ class PinchDesignScene(QGraphicsScene):
         if self._des_type == 'abv':
             self._hot_str = self._setup.hot_above
             self._cold_str = self._setup.cold_above
+            self._design = self._setup.design_above
             self._setup.design_above_changed.connect(self.paint_exchangers)
         else:
             self._hot_str = self._setup.hot_below
             self._cold_str = self._setup.cold_below
+            self._design = self._setup.design_below
             self._setup.design_below_changed.connect(self.paint_exchangers)
 
     def paint_interval_diagram(self) -> None:
@@ -271,6 +302,14 @@ class PinchDesignScene(QGraphicsScene):
         self._hot_strm_arrows = pd.Series()
         self._cold_strm_arrows = pd.Series()
         scene.clear()
+
+        # read stream data
+        if self._des_type == 'abv':
+            self._hot_str = self._setup.hot_above
+            self._cold_str = self._setup.cold_above
+        else:
+            self._hot_str = self._setup.hot_below
+            self._cold_str = self._setup.cold_below
 
         self._paint_horizontal_lines()
         self._paint_arrows('hot')
@@ -314,7 +353,7 @@ class PinchDesignScene(QGraphicsScene):
         hot_int = np.unique(
             self._hot_str.loc[
                 :,
-                [STFM.TIN.name, STFM.TOUT.name]
+                [STFCFM.TIN.name, STFCFM.TOUT.name]
             ].values
         )
         dt = self._setup.dt
@@ -358,24 +397,24 @@ class PinchDesignScene(QGraphicsScene):
         h = scene.height() - (self._top_p + self._bot_p)
 
         if stream_type == 'hot':
-            t_in = self._hot_str[STFM.TIN.name]
-            t_out = self._hot_str[STFM.TOUT.name]
+            t_in = self._hot_str[STFCFM.TIN.name]
+            t_out = self._hot_str[STFCFM.TOUT.name]
             t_int = np.unique(
                 self._hot_str.loc[
                     :,
-                    [STFM.TIN.name, STFM.TOUT.name]
+                    [STFCFM.TIN.name, STFCFM.TOUT.name]
                 ].values
             )
             axis_x_offset = 0
             color = Qt.red
             cataloguer = self._hot_strm_arrows
         elif stream_type == 'cold':
-            t_in = self._cold_str[STFM.TIN.name]
-            t_out = self._cold_str[STFM.TOUT.name]
+            t_in = self._cold_str[STFCFM.TIN.name]
+            t_out = self._cold_str[STFCFM.TOUT.name]
             t_int = np.unique(
                 self._hot_str.loc[
                     :,
-                    [STFM.TIN.name, STFM.TOUT.name]
+                    [STFCFM.TIN.name, STFCFM.TOUT.name]
                 ].values
             ) - self._setup.dt
             axis_x_offset = (w + self._axis_width) / 2
@@ -396,10 +435,10 @@ class PinchDesignScene(QGraphicsScene):
             y2 = self._map_y(self._temp_to_px(t_out[i], t_int))
 
             if stream_type == 'hot':
-                arr_id = self._hot_str.at[i, STFM.ID.name]
+                arr_id = self._hot_str.at[i, STFCFM.ID.name]
                 arrow = LiveArrowItem(arr_id, x1, y1, x2, y2, color=color)
             else:
-                arr_id = self._cold_str.at[i, STFM.ID.name]
+                arr_id = self._cold_str.at[i, STFCFM.ID.name]
                 arrow = NamedArrow(arr_id, x1, y1, x2, y2, color=color)
 
             cataloguer.at[arr_id] = arrow  # store for later referencing
@@ -415,12 +454,15 @@ class PinchDesignScene(QGraphicsScene):
 
         self._design_lines = []
 
-        design = self._setup.design_above
+        if self._des_type == 'abv':
+            design = self._setup.design_above
+        else:
+            design = self._setup.design_below
 
         interval = np.unique(
             self._hot_str.loc[
                 :,
-                [STFM.TIN.name, STFM.TOUT.name]
+                [STFCFM.TIN.name, STFCFM.TOUT.name]
             ].values
         )
 
@@ -462,44 +504,55 @@ class PinchDesignScene(QGraphicsScene):
                     self._design_lines.append(ex_item)
 
     def mousePressEvent(self, event: QGraphicsSceneMouseEvent):
-        trans = self.parent().transform()
+        if event.button() == Qt.LeftButton:
+            trans = self.parent().transform()
 
-        item = self.itemAt(event.scenePos(), trans)
-        if isinstance(item, LiveArrowItem):
-            self._source_item = item.name
-            self._source_y = event.scenePos().y()
-            self._accepts_hover = True
-        else:
-            self._source_item = None
-            self._source_y = None
-            self._accepts_hover = False
+            item = self.itemAt(event.scenePos(), trans)
+            if isinstance(item, LiveArrowItem):
+                self._source_item = item.name
+                self._source_y = event.scenePos().y()
+                self._accepts_hover = True
+            else:
+                self._source_item = None
+                self._source_y = None
+                self._accepts_hover = False
 
         return super().mousePressEvent(event)
 
     def mouseReleaseEvent(self, event: QGraphicsSceneMouseEvent):
-        trans = self.parent().transform()
+        if event.button() == Qt.LeftButton:
+            trans = self.parent().transform()
 
-        item = self.itemAt(event.scenePos(), trans)
-        if isinstance(item, NamedArrow) and self._source_y is not None and \
-                self._accepts_hover:
+            item = self.itemAt(event.scenePos(), trans)
+            if isinstance(item, NamedArrow) and \
+                self._source_y is not None and \
+                    self._accepts_hover:
 
-            interval = np.unique(
-                self._hot_str.loc[
-                    :,
-                    [STFM.TIN.name, STFM.TOUT.name]
-                ].values
-            )
+                interval = np.unique(
+                    self._hot_str.loc[
+                        :,
+                        [STFCFM.TIN.name, STFCFM.TOUT.name]
+                    ].values
+                )
 
-            source_inter = self._px_to_interval(self._source_y, interval)
-            dest_inter = self._px_to_interval(event.scenePos().y(), interval)
+                source_inter = self._px_to_interval(self._source_y, interval)
+                dest_inter = self._px_to_interval(
+                    event.scenePos().y(), interval
+                )
 
-            if source_inter == dest_inter:
-                # if the intervals of the clicks are the same, paint the lines
-                inter = self._setup.summary.at[source_inter, SFM.INTERVAL.name]
-                dialog = ExchangerInputDialog(self._des_type, inter,
-                                              self._source_item, item.name,
-                                              self._setup)
-                dialog.exec_()
+                if source_inter == dest_inter:
+                    # if the intervals of the clicks are the same, prompt user
+                    summary = self._setup.summary
+                    pinch = self._setup.pinch
+                    summary = summary.loc[
+                        summary[SFM.TIN.name] <= pinch,
+                        :
+                    ].reset_index(drop=True)
+                    inter = summary.at[source_inter, SFM.INTERVAL.name]
+                    dialog = ExchangerInputDialog(self._des_type, inter,
+                                                  self._source_item, item.name,
+                                                  self._setup)
+                    dialog.exec_()
 
         return super().mouseReleaseEvent(event)
 
@@ -627,6 +680,137 @@ class ExchangerInputDialog(QDialog):
                                   self._interval, self._source, self._dest)
 
 
+class SplitStreamDialog(QDialog):
+    _flowrates_changed = pyqtSignal()
+
+    def __init__(self, stream_id: str, stream_type: str,
+                 scene: PinchDesignScene, parent=None):
+        super().__init__(parent=parent)
+
+        self._scene = scene
+
+        self._stream_id = stream_id
+        self._stream_type = stream_type
+        self._des_type = scene._des_type
+        self._setup = scene._setup
+        init_rows = 2
+        base_flow = self._get_base_flow_split() / init_rows
+        self._flowrates = [base_flow] * init_rows
+
+        self.createUi()
+
+    def createUi(self):
+        self.setWindowModality(Qt.WindowModal)
+        self.setModal(True)
+        self.setWindowTitle("Split stream '{0}'".format(self._stream_id))
+        self.resize(250, 250)
+
+        label1 = QLabel(
+            "# of streams to split '{0}' into:".format(self._stream_id),
+            self
+        )
+
+        flow_validator = QIntValidator(2, 5)
+
+        flow_edit = QLineEdit(str(len(self._flowrates)), self)
+        flow_edit.setAlignment(Qt.AlignCenter)
+        flow_edit.setValidator(flow_validator)
+        flow_edit.textChanged.connect(self._update_flow_rates)
+        self._flow_edit = flow_edit
+
+        form_layout = QFormLayout()
+        form_layout.setLabelAlignment(Qt.AlignRight)
+        form_layout.setWidget(0, QFormLayout.LabelRole, label1)
+        form_layout.setWidget(0, QFormLayout.FieldRole, flow_edit)
+
+        table_view = QTableView(self)
+        table_model = StreamSplitTableModel(self, table_view)
+        table_view.setModel(table_model)
+        table_view.horizontalHeader().setSectionResizeMode(
+            QHeaderView.Stretch
+        )
+
+        button_box = QDialogButtonBox(self)
+        button_box.setOrientation(Qt.Horizontal)
+        button_box.setStandardButtons(
+            QDialogButtonBox.Ok | QDialogButtonBox.Cancel
+        )
+        button_box.accepted.connect(self.accept)
+        button_box.accepted.connect(self._split_streams)
+        button_box.rejected.connect(self.reject)
+
+        grid_layout = QGridLayout(self)
+        grid_layout.addLayout(form_layout, 0, 0, 1, 1)
+        grid_layout.addWidget(table_view, 1, 0, 1, 1)
+        grid_layout.addWidget(button_box, 2, 0, 1, 1)
+
+    def _get_base_flow_split(self) -> float:
+        if self._des_type == 'abv':
+            if self._stream_type == 'hot':
+                streams = self._setup.hot_above
+            else:
+                streams = self._setup.cold_above
+
+        else:
+            if self._stream_type == 'hot':
+                streams = self._setup.hot_below
+            else:
+                streams = self._setup.cold_below
+
+        stream = streams.set_index(STFCFM.ID.name).loc[self._stream_id, :]
+
+        return stream.at[STFCFM.FLOW.name]
+
+    def _update_flow_rates(self) -> int:
+        try:
+            n_rows = int(self._flow_edit.text())
+        except:
+            pass
+        else:
+            validator = self._flow_edit.validator()
+            if validator.bottom() <= n_rows <= validator.top():
+                base_flow = self._get_base_flow_split() / n_rows
+                self._flowrates = [base_flow] * n_rows
+                self._flowrates_changed.emit()
+
+    def _split_streams(self):
+        self._setup.split_stream(self._des_type, self._stream_type,
+                                 self._stream_id, self._flowrates)
+        self._scene.paint_interval_diagram()
+        self._scene.paint_exchangers()
+
+
+class StreamSplitTableModel(QAbstractTableModel):
+    def __init__(self, dialog: SplitStreamDialog, parent: QTableView):
+        super().__init__(parent=parent)
+        self._dialog = dialog
+        self._load_flowrates()
+        dialog._flowrates_changed.connect(self._load_flowrates)
+
+    def _load_flowrates(self):
+        self.layoutAboutToBeChanged.emit()
+        self._flowrates = self._dialog._flowrates
+        self.layoutChanged.emit()
+
+    def rowCount(self, parent: QModelIndex = None) -> int:
+        return len(self._flowrates)
+
+    def columnCount(self, parent: QModelIndex = None) -> int:
+        return 1
+
+    def data(self, index: QModelIndex, role: int = Qt.DisplayRole):
+        if not index.isValid():
+            return None
+
+        row = index.row()
+
+        if role == Qt.DisplayRole:
+            return str(self._flowrates[row])
+
+        else:
+            return None
+
+
 if __name__ == "__main__":
     import sys
     import pathlib
@@ -638,7 +822,7 @@ if __name__ == "__main__":
 
     app = QApplication(sys.argv)
 
-    w = PinchDesignDialog(setup, 'above')
+    w = PinchDesignDialog(setup, 'blw')
     w.show()
 
     sys.exit(app.exec_())

@@ -19,7 +19,7 @@ class ExchangerDesignTableModel(QAbstractTableModel):
 
         self._load_design()
 
-        if design_type == 'above':
+        if design_type == 'abv':
             self._setup.design_above_changed.connect(self._load_design)
         else:
             self._setup.design_below_changed.connect(self._load_design)
@@ -27,7 +27,7 @@ class ExchangerDesignTableModel(QAbstractTableModel):
     def _load_design(self):
         self.layoutAboutToBeChanged.emit()
 
-        if self._design_type == 'above':
+        if self._design_type == 'abv':
             self._design = self._setup.design_above
         else:
             self._design = self._setup.design_below
