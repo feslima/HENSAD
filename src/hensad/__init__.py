@@ -1,8 +1,12 @@
-import pandas as pd
-import numpy as np
-from typing import Union, List, TypedDict, Tuple, Type
-from enum import Enum, unique
 from abc import ABC, abstractmethod
+from enum import Enum, unique
+from typing import List, Tuple, Type, TypedDict, Union
+
+import numpy as np
+import pandas as pd
+
+from .cost import (ArrangementType, ExchangerType, MaterialType,
+                   calculate_bare_module_cost)
 
 
 @unique
@@ -300,37 +304,31 @@ def calculate_pinch_utilities(
     summary: pd.DataFrame
 ) -> Tuple[float, float, float]:
     SFM = SummaryFrameMapper
-    exheat = summary[SFM.EXHEAT.name].to_numpy()
 
-    # find the index of the first excess
-    idx = 0
-    if exheat[idx] < 0:
-        heat_pre_pinch = exheat[idx]
-    else:
-        heat_pre_pinch = 0
+    n = len(summary)
 
-    while idx < exheat.size:
-        if exheat[idx] > 0:
-            break
-        else:
-            idx += 1
+    for i in range(n - 1, 0, -1):
+        # start from last block upwards
+        ex_heat = summary.at[i, SFM.EXHEAT.name]
 
-    # keep the sum until the pinch is found or the list ends
-    pinch_idx = None
-    huq = heat_pre_pinch
-    for i in range(idx, exheat.size):
-        huq += exheat[i]
+        if ex_heat <= 0 and i != (n - 1):
+            pinch_idx = i  # previous block
+            if summary.at[i + 1, SFM.EXHEAT.name] <= 0:
+                pinch_idx = None  # fall back in case last block has no exheat
 
-        if huq < 0:
-            pinch_idx = i
             break
 
-    huq = np.abs(huq)
     if pinch_idx is None:
-        cuq = 0.0  # There is no pinch
+        # There is no pinch
+        huq = np.abs(summary[SFM.EXHEAT.name].sum().item())
+        cuq = 0.0
         hot_t_pinch = np.NaN
     else:
-        cuq = exheat[(pinch_idx+1):].sum()
+        huq = abs(summary.loc[0:pinch_idx, SFM.EXHEAT.name].sum().item())
+        cuq = abs(summary.loc[
+            (pinch_idx + 1):(n - 1),
+            SFM.EXHEAT.name
+        ].sum().item())
         hot_t_pinch = summary.at[pinch_idx, SFM.TOUT.name]
 
     return hot_t_pinch, huq, cuq
@@ -485,7 +483,7 @@ def calculate_log_mean_diff(ex_type: str, hot_in: float, hot_out: float,
     else:
         raise ValueError("Invalid approach type.")
 
-    if DTA == DTB:
+    if np.isclose(DTA, DTB):
         LMTD = DTA
     else:
         LMTD = (DTA - DTB) / np.log(DTA / DTB)
@@ -733,8 +731,7 @@ def _build_composite_borders(hot_composite: pd.DataFrame,
     cTQ = cold_composite
 
     # a border is defined as a single vertical line at a Q value
-    borders = pd.DataFrame(columns=['hot', 'cold', 'Q'])
-
+    new_borders = []
     for i in range(len(cTQ)):
         # each iteration we determine two borders
         cQ, cT = cTQ.loc[i, ['Q', 'T']]
@@ -775,16 +772,32 @@ def _build_composite_borders(hot_composite: pd.DataFrame,
                 cQ, *_search_enthalpy_interval(cQ, cTQ)
             )
 
-        borders = borders.append([
+        new_borders.append([
             {'hot': tH1, 'cold': tC1, 'Q': hQ},
             {'hot': tH2, 'cold': tC2, 'Q': cQ}
-        ], ignore_index=True)
+        ])
+
+        # borders = borders.append([
+        #     {'hot': tH1, 'cold': tC1, 'Q': hQ},
+        #     {'hot': tH2, 'cold': tC2, 'Q': cQ}
+        # ], ignore_index=True)
+
+    borders = pd.concat(
+        [pd.DataFrame(border) for border in new_borders],
+        ignore_index=True
+    )
+
+    # sort by enthalpy value to ensure correct order of borders
+    borders.sort_values(by='Q', inplace=True, ignore_index=True)
 
     # if there is a pinch, a duplicated border (row) will appear. Drop them
     borders.drop_duplicates(ignore_index=True, inplace=True)
 
-    # sort by enthalpy value to ensure correct order of borders
-    borders.sort_values(by='Q', inplace=True, ignore_index=True)
+    # drop duplicated vertical segments to avoid overestimation of areas
+    borders.drop_duplicates('hot', keep='last',
+                            ignore_index=True, inplace=True)
+    borders.drop_duplicates('cold', keep='first',
+                            ignore_index=True, inplace=True)
     return borders
 
 
@@ -811,6 +824,12 @@ def _find_streams_in_interval(
     end_index = summary.index[
         np.logical_and(int_in >= t2, t2 > int_out)
     ].values.item()
+
+    if start_index > end_index:
+        # swap start and end indexes
+        tmp_idx = start_index
+        start_index = end_index
+        end_index = tmp_idx
 
     # get unique indexes of streams
     indexes = np.unique(
@@ -874,13 +893,14 @@ def calculate_segments_data(
         if borders.loc[i, ['hot', 'cold']].notna().all(axis=None) and \
                 borders.loc[i + 1, ['hot', 'cold']].notna().all(axis=None):
             # fill the temperature intervals
-            hot_1 = borders.at[i, 'hot']
-            hot_2 = borders.at[i + 1, 'hot']
+            # rounding to 6 decimals due floating point bugs in Q calculations
+            hot_1 = np.around(borders.at[i, 'hot'], decimals=6)
+            hot_2 = np.around(borders.at[i + 1, 'hot'], decimals=6)
             segments.at[i, SEGFM.HOT_IN.name] = hot_1
             segments.at[i, SEGFM.HOT_OUT.name] = hot_2
 
-            cold_1 = borders.at[i, 'cold']
-            cold_2 = borders.at[i + 1, 'cold']
+            cold_1 = np.around(borders.at[i, 'cold'], decimals=6)
+            cold_2 = np.around(borders.at[i + 1, 'cold'], decimals=6)
             segments.at[i, SEGFM.COLD_IN.name] = cold_1
             segments.at[i, SEGFM.COLD_OUT.name] = cold_2
 
@@ -927,3 +947,53 @@ def calculate_segments_data(
     segments = segments.fillna(0.0)
 
     return segments
+
+
+def calculate_eaoc(hot: pd.DataFrame, cold: pd.DataFrame, dt: float,
+                   hot_coefs: pd.DataFrame, cold_coefs: pd.DataFrame,
+                   extype: ExchangerType, arrangement: ArrangementType,
+                   shell_mat: MaterialType, tube_mat: MaterialType,
+                   pressure: float) -> Tuple[float, float, float, float, int]:
+    SEGFM = SegmentsFrameMapper
+
+    # get the heat exchanger network area estimate
+    summary = calculate_summary_table(hot, cold, dt)
+    pinch, huq, cuq = calculate_pinch_utilities(summary)
+    hTQ, cTQ = calculate_composite_enthalpy(hot, cold, dt, huq, cuq,
+                                            hot_coefs, cold_coefs, summary)
+    segments = calculate_segments_data(hot, cold, dt, hTQ, cTQ, hot_coefs,
+                                       cold_coefs, summary)
+
+    netarea = (segments[SEGFM.SUM_QH.name]
+               / (segments[SEGFM.DTLN.name] * 0.8)).sum()
+
+    # number of exchangers
+    ha, ca, hb, cb = pinch_streams_tables(hot, cold, dt, pinch, hot_coefs,
+                                          cold_coefs)
+    na = calculate_minimum_exchangers(ha, ca, 'above')
+    nb = calculate_minimum_exchangers(hb, cb, 'below')
+    n_ex = na + nb
+
+    # area per exchanger
+    area = netarea / n_ex
+
+    # bare module cost
+    index_ratio = 542 / 397  # CEPCI index
+    cbm = calculate_bare_module_cost(extype, arrangement, shell_mat, tube_mat,
+                                     area, pressure) * index_ratio
+
+    # utilities costs
+    h_price = 9.830  # $/GJ
+    c_price = 0.353  # $/GJ
+    huc = huq * 1e3 * 3600 * 8000 * h_price * 1e-9
+    cuc = cuq * 1e3 * 3600 * 8000 * c_price * 1e-9
+
+    # compound cost
+    n = 5  # years
+    i = 0.1  # % per year (before tax)
+    cc = (i * (1 + i) ** n) / ((1 + i) ** n - 1)
+
+    # final eaoc
+    eaoc = cc * n_ex * cbm + huc + cuc
+
+    return eaoc, netarea, huq, cuq, n_ex

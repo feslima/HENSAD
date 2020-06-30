@@ -45,6 +45,22 @@
             "justMyCode": false
         },
         {
+            "name": "EAOC",
+            "type": "python",
+            "request": "launch",
+            "program": "${workspaceFolder}/src/gui/views/diagrams/eaoc.py",
+            "console": "integratedTerminal",
+            "justMyCode": false
+        },
+        {
+            "name": "EAOC (TEST)",
+            "type": "python",
+            "request": "launch",
+            "program": "${workspaceFolder}/tests/eaoc_test.py",
+            "console": "integratedTerminal",
+            "justMyCode": false
+        },
+        {
             "name": "Python: Current File",
             "type": "python",
             "request": "launch",

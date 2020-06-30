@@ -1,0 +1,100 @@
+TYPE,SHELL,TUBE,FM
+Air cooler,,Carbon Steel,1.0
+Air cooler,,Aluminum,1.42
+Air cooler,,Stainless Steel,2.93
+Bayonet,Carbon Steel,Carbon Steel,1.00
+Bayonet,Carbon Steel,Copper,1.35
+Bayonet,Carbon Steel,Nickel,2.68
+Bayonet,Carbon Steel,Stainless Steel,1.81
+Bayonet,Carbon Steel,Titanium,4.63
+Bayonet,Copper,Copper,1.69
+Bayonet,Nickel,Nickel,3.73
+Bayonet,Stainless Steel,Stainless Steel,2.73
+Bayonet,Titanium,Titanium,11.38
+Double pipe,Carbon Steel,Carbon Steel,1.00
+Double pipe,Carbon Steel,Copper,1.35
+Double pipe,Carbon Steel,Nickel,2.68
+Double pipe,Carbon Steel,Stainless Steel,1.81
+Double pipe,Carbon Steel,Titanium,4.63
+Double pipe,Copper,Copper,1.69
+Double pipe,Nickel,Nickel,3.73
+Double pipe,Stainless Steel,Stainless Steel,2.73
+Double pipe,Titanium,Titanium,11.38
+Fixed tube,Carbon Steel,Carbon Steel,1.00
+Fixed tube,Carbon Steel,Copper,1.35
+Fixed tube,Carbon Steel,Nickel,2.68
+Fixed tube,Carbon Steel,Stainless Steel,1.81
+Fixed tube,Carbon Steel,Titanium,4.63
+Fixed tube,Copper,Copper,1.69
+Fixed tube,Nickel,Nickel,3.73
+Fixed tube,Stainless Steel,Stainless Steel,2.73
+Fixed tube,Titanium,Titanium,11.38
+Flat plate,Carbon Steel,,1.0
+Flat plate,Copper,,1.35
+Flat plate,Stainless Steel,,2.45
+Flat plate,Nickel,,2.68
+Flat plate,Titanium,,4.63
+Floating head,Carbon Steel,Carbon Steel,1.00
+Floating head,Carbon Steel,Copper,1.35
+Floating head,Carbon Steel,Nickel,2.68
+Floating head,Carbon Steel,Stainless Steel,1.81
+Floating head,Carbon Steel,Titanium,4.63
+Floating head,Copper,Copper,1.69
+Floating head,Nickel,Nickel,3.73
+Floating head,Stainless Steel,Stainless Steel,2.73
+Floating head,Titanium,Titanium,11.38
+Kettle reboiler,Carbon Steel,Carbon Steel,1.00
+Kettle reboiler,Carbon Steel,Copper,1.35
+Kettle reboiler,Carbon Steel,Nickel,2.68
+Kettle reboiler,Carbon Steel,Stainless Steel,1.81
+Kettle reboiler,Carbon Steel,Titanium,4.63
+Kettle reboiler,Copper,Copper,1.69
+Kettle reboiler,Nickel,Nickel,3.73
+Kettle reboiler,Stainless Steel,Stainless Steel,2.73
+Kettle reboiler,Titanium,Titanium,11.38
+Multiple pipe,Carbon Steel,Carbon Steel,1.00
+Multiple pipe,Carbon Steel,Copper,1.35
+Multiple pipe,Carbon Steel,Nickel,2.68
+Multiple pipe,Carbon Steel,Stainless Steel,1.81
+Multiple pipe,Carbon Steel,Titanium,4.63
+Multiple pipe,Copper,Copper,1.69
+Multiple pipe,Nickel,Nickel,3.73
+Multiple pipe,Stainless Steel,Stainless Steel,2.73
+Multiple pipe,Titanium,Titanium,11.38
+Teflon tube, Carbon Steel,,1.0
+Teflon tube, Copper,,1.2
+Teflon tube, Stainless Steel,,1.3
+Teflon tube, Nickel,,1.4
+Teflon tube, Titanium,,3.3
+Scraped wall,Carbon Steel,Carbon Steel,1.00
+Scraped wall,Carbon Steel,Copper,1.35
+Scraped wall,Carbon Steel,Nickel,2.68
+Scraped wall,Carbon Steel,Stainless Steel,1.81
+Scraped wall,Carbon Steel,Titanium,4.63
+Scraped wall,Copper,Copper,1.69
+Scraped wall,Nickel,Nickel,3.73
+Scraped wall,Stainless Steel,Stainless Steel,2.73
+Scraped wall,Titanium,Titanium,11.38
+Spiral plate,Carbon Steel,,1.0
+Spiral plate,Copper,,1.35
+Spiral plate,Stainless Steel,,2.45
+Spiral plate,Nickel,,2.68
+Spiral plate,Titanium,,4.63
+Spiral tube,Carbon Steel,Carbon Steel,1.00
+Spiral tube,Carbon Steel,Copper,1.35
+Spiral tube,Carbon Steel,Nickel,2.68
+Spiral tube,Carbon Steel,Stainless Steel,1.81
+Spiral tube,Carbon Steel,Titanium,4.63
+Spiral tube,Copper,Copper,1.69
+Spiral tube,Nickel,Nickel,3.73
+Spiral tube,Stainless Steel,Stainless Steel,2.73
+Spiral tube,Titanium,Titanium,11.38
+U tube,Carbon Steel,Carbon Steel,1.00
+U tube,Carbon Steel,Copper,1.35
+U tube,Carbon Steel,Nickel,2.68
+U tube,Carbon Steel,Stainless Steel,1.81
+U tube,Carbon Steel,Titanium,4.63
+U tube,Copper,Copper,1.69
+U tube,Nickel,Nickel,3.73
+U tube,Stainless Steel,Stainless Steel,2.73
+U tube,Titanium,Titanium,11.38
