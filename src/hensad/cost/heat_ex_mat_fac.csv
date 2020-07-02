@@ -61,11 +61,11 @@ Multiple pipe,Copper,Copper,1.69
 Multiple pipe,Nickel,Nickel,3.73
 Multiple pipe,Stainless Steel,Stainless Steel,2.73
 Multiple pipe,Titanium,Titanium,11.38
-Teflon tube, Carbon Steel,,1.0
-Teflon tube, Copper,,1.2
-Teflon tube, Stainless Steel,,1.3
-Teflon tube, Nickel,,1.4
-Teflon tube, Titanium,,3.3
+Teflon tube,,Carbon Steel,1.0
+Teflon tube,,Copper,1.2
+Teflon tube,,Stainless Steel,1.3
+Teflon tube,,Nickel,1.4
+Teflon tube,,Titanium,3.3
 Scraped wall,Carbon Steel,Carbon Steel,1.00
 Scraped wall,Carbon Steel,Copper,1.35
 Scraped wall,Carbon Steel,Nickel,2.68
