@@ -8,7 +8,7 @@ import pathlib
 MODFOLDER = pathlib.Path(__file__).resolve().parents[1] / 'src'
 sys.path.insert(0, str(MODFOLDER))
 
-from hensad import ExchangerType, ArrangementType, MaterialType, calculate_eaoc
+from hensad import ExchangerType, ArrangementType, MaterialType, calculate_eaoc  # noqa
 
 # from pyinstrument import Profiler
 # profile = line_profiler.LineProfiler()
@@ -35,11 +35,11 @@ def main():
 
     DTMIN = 5
     DTMAX = 55
-
+    PTS = np.linspace(DTMIN, DTMAX, 20, dtype=float)
     # profiler = Profiler()
     # profiler.start()
 
-    for dt in np.arange(DTMIN, DTMAX + 1, dtype=float):
+    for dt in PTS:
         eaoc, netarea, huq, cuq, n_ex = calculate_eaoc(
             hot, cold, dt,
             hot_film, cold_film,

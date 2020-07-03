@@ -8,6 +8,8 @@ import pandas as pd
 from .cost import (ArrangementType, ExchangerType, MaterialType,
                    calculate_bare_module_cost)
 
+_ROUND_OFF = 4  # digits to round off in interval comparisons
+
 
 @unique
 class FrameColumnMapperEnum(Enum):
@@ -355,52 +357,54 @@ def pinch_streams_tables(
 
     else:
         # split the streams
+        hot_pinch = np.around(pinch, _ROUND_OFF)
+        cold_pinch = np.around(pinch - dt, _ROUND_OFF)
         # above section
-        index_hot_abv = hot[STFM.TIN.name] >= pinch
+        index_hot_abv = hot[STFM.TIN.name] >= hot_pinch
         hot_above = hot.loc[index_hot_abv, :]
 
-        index_cold_abv = cold[STFM.TOUT.name] >= (pinch - dt)
+        index_cold_abv = cold[STFM.TOUT.name] >= cold_pinch
         cold_above = cold.loc[index_cold_abv, :]
 
         # replace temperatures below pinch with pinch value
         hot_above.loc[
-            hot_above[STFM.TOUT.name] < pinch,
+            hot_above[STFM.TOUT.name] < hot_pinch,
             STFM.TOUT.name
-        ] = pinch  # cap hot outlet at pinch
+        ] = hot_pinch  # cap hot outlet at pinch
 
         hot_above = hot_above.set_index(STFM.ID.name).join(
             hot_film.set_index(FCFM.ID.name)
         ).reset_index()  # append the film coefficients
 
         cold_above.loc[
-            cold_above[STFM.TIN.name] < (pinch - dt),
+            cold_above[STFM.TIN.name] < cold_pinch,
             STFM.TIN.name
-        ] = (pinch - dt)  # cap cold inlet at pinch
+        ] = cold_pinch  # cap cold inlet at pinch
 
         cold_above = cold_above.set_index(STFM.ID.name).join(
             cold_film.set_index(FCFM.ID.name)
         ).reset_index()  # append the film coefficients
 
         # below section
-        index_hot_blw = hot[STFM.TOUT.name] < pinch
+        index_hot_blw = hot[STFM.TOUT.name] < hot_pinch
         hot_below = hot.loc[index_hot_blw, :]
 
-        index_cold_blw = cold[STFM.TIN.name] < (pinch - dt)
+        index_cold_blw = cold[STFM.TIN.name] < cold_pinch
         cold_below = cold.loc[index_cold_blw, :]
 
         hot_below.loc[
-            hot_below[STFM.TIN.name] >= pinch,
+            hot_below[STFM.TIN.name] >= hot_pinch,
             STFM.TIN.name
-        ] = pinch  # cap hot inlet at pinch
+        ] = hot_pinch  # cap hot inlet at pinch
 
         hot_below = hot_below.set_index(STFM.ID.name).join(
             hot_film.set_index(FCFM.ID.name)
         ).reset_index()  # append the film coefficients
 
         cold_below.loc[
-            cold_below[STFM.TOUT.name] >= (pinch - dt),
+            cold_below[STFM.TOUT.name] >= cold_pinch,
             STFM.TOUT.name
-        ] = (pinch - dt)  # cap cold outlet at pinch
+        ] = cold_pinch  # cap cold outlet at pinch
 
         cold_below = cold_below.set_index(STFM.ID.name).join(
             cold_film.set_index(FCFM.ID.name)
@@ -777,11 +781,6 @@ def _build_composite_borders(hot_composite: pd.DataFrame,
             {'hot': tH2, 'cold': tC2, 'Q': cQ}
         ])
 
-        # borders = borders.append([
-        #     {'hot': tH1, 'cold': tC1, 'Q': hQ},
-        #     {'hot': tH2, 'cold': tC2, 'Q': cQ}
-        # ], ignore_index=True)
-
     borders = pd.concat(
         [pd.DataFrame(border) for border in new_borders],
         ignore_index=True
@@ -815,8 +814,8 @@ def _find_streams_in_interval(
     else:
         STRIDX = SFM.COLDSTRIDX.name
 
-    int_out = summary[SFM.TOUT.name] - dt
-    int_in = summary[SFM.TIN.name] - dt
+    int_out = (summary[SFM.TOUT.name] - dt).round(_ROUND_OFF)
+    int_in = (summary[SFM.TIN.name] - dt).round(_ROUND_OFF)
 
     start_index = summary.index[
         np.logical_and(int_in > t1, t1 >= int_out)
@@ -894,13 +893,13 @@ def calculate_segments_data(
                 borders.loc[i + 1, ['hot', 'cold']].notna().all(axis=None):
             # fill the temperature intervals
             # rounding to 6 decimals due floating point bugs in Q calculations
-            hot_1 = np.around(borders.at[i, 'hot'], decimals=6)
-            hot_2 = np.around(borders.at[i + 1, 'hot'], decimals=6)
+            hot_1 = np.around(borders.at[i, 'hot'], decimals=_ROUND_OFF)
+            hot_2 = np.around(borders.at[i + 1, 'hot'], decimals=_ROUND_OFF)
             segments.at[i, SEGFM.HOT_IN.name] = hot_1
             segments.at[i, SEGFM.HOT_OUT.name] = hot_2
 
-            cold_1 = np.around(borders.at[i, 'cold'], decimals=6)
-            cold_2 = np.around(borders.at[i + 1, 'cold'], decimals=6)
+            cold_1 = np.around(borders.at[i, 'cold'], decimals=_ROUND_OFF)
+            cold_2 = np.around(borders.at[i + 1, 'cold'], decimals=_ROUND_OFF)
             segments.at[i, SEGFM.COLD_IN.name] = cold_1
             segments.at[i, SEGFM.COLD_OUT.name] = cold_2
 
