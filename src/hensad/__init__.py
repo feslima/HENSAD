@@ -5,8 +5,8 @@ from typing import List, Tuple, Type, TypedDict, Union
 import numpy as np
 import pandas as pd
 
-from .cost import (ArrangementType, ExchangerType, MaterialType,
-                   calculate_bare_module_cost)
+from .cost import (COST_DATA, MATERIAL_DATA, ArrangementType, ExchangerType,
+                   MaterialType, calculate_bare_module_cost)
 
 _ROUND_OFF = 4  # digits to round off in interval comparisons
 
@@ -54,16 +54,20 @@ class HeatExchangerDesignFrameMapper(FrameColumnMapperEnum):
     ID = 'Exchanger ID'
     INT = 'Interval'
     DUTY = 'Heat Duty'
+    COST = 'Bare module cost'
+    A = 'Exchange Area'
+    TYPE = 'Exchanger Type'
+    ARRANGEMENT = 'Tube Arrangement'
+    SHELL = 'Shell Material'
+    TUBE = 'Tube Material'
     SOURCE = 'Stream Source'
     DEST = 'Stream Destination'
-    TYPE = 'Exchanger Type'
     HOT_IN = 'Hot Stream Inlet'
     HOT_OUT = 'Hot Stream Outlet'
     COLD_IN = 'Cold Stream Inlet'
     COLD_OUT = 'Cold Stream Outlet'
     DT = 'Delta T (lm)'
     U = 'Heat Transfer Coefficient'
-    A = 'Exchange Area'
     NSHELL = 'Shell Passes'
     F = 'Correction Factor'
 

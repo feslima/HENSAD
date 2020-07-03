@@ -16,7 +16,9 @@ from PyQt5.QtWidgets import (QAction, QApplication, QComboBox, QDialog,
                              QMenu, QStyleOptionGraphicsItem, QTableView,
                              QVBoxLayout, QWidget)
 
-from gui.models.core import HEDFM, SFM, STFCFM, STFM, Setup
+from gui.models.core import (COST_DATA, HEDFM, MATERIAL_DATA, SFM, STFCFM,
+                             STFM, ArrangementType, ExchangerType,
+                             MaterialType, Setup)
 from gui.models.exchanger_table import ExchangerDesignTableModel
 from gui.resources import icons_rc
 from gui.views.common import ArrowItem
@@ -579,10 +581,15 @@ class ExchangerInputDialog(QDialog):
         label2 = QLabel("Exchanger Duty:", self)
         label3 = QLabel("Correction Factor:", self)
         label4 = QLabel("Exchanger Type:", self)
+        label5 = QLabel("Tube Arrangement:", self)
+        label6 = QLabel("Shell side material:", self)
+        label7 = QLabel("Tube side material:", self)
+        label8 = QLabel("Operating pressure:", self)
 
         reg_ex = QRegExp("^[A-Z$a-z$0-9][a-z_$0-9]{,9}$")
         id_validator = QRegExpValidator(reg_ex)
         duty_validator = QDoubleValidator(0.0, 1.0e9, _MAX_NUM_DIGITS)
+        pressure_validator = QDoubleValidator(0.0, 1.0e9, _MAX_NUM_DIGITS)
         factor_validator = QDoubleValidator(0.0, 1.0, 3)
 
         id_edit = QLineEdit(self)
@@ -597,6 +604,13 @@ class ExchangerInputDialog(QDialog):
         duty_editor.textChanged.connect(self.check_inputs)
         self._duty_editor = duty_editor
 
+        pressure_editor = QLineEdit(self)
+        pressure_editor.setText("1.0")
+        pressure_editor.setAlignment(Qt.AlignCenter)
+        pressure_editor.setValidator(pressure_validator)
+        pressure_editor.textChanged.connect(self.check_inputs)
+        self._pressure_editor = pressure_editor
+
         factor_editor = QLineEdit(self)
         factor_editor.setText("0.8")
         factor_editor.setAlignment(Qt.AlignCenter)
@@ -605,19 +619,47 @@ class ExchangerInputDialog(QDialog):
         self._factor_editor = factor_editor
 
         type_combo = QComboBox(self)
-        type_combo.addItems(['Co-current', 'Counter-current'])
-        self._type_combo = type_combo
+        arrang_combo = QComboBox(self)
+        shell_combo = QComboBox(self)
+        tube_combo = QComboBox(self)
 
-        self.form_layout = QFormLayout()
-        self.form_layout.setLabelAlignment(Qt.AlignRight)
-        self.form_layout.setWidget(0, QFormLayout.LabelRole, label1)
-        self.form_layout.setWidget(1, QFormLayout.LabelRole, label2)
-        self.form_layout.setWidget(2, QFormLayout.LabelRole, label3)
-        self.form_layout.setWidget(3, QFormLayout.LabelRole, label4)
-        self.form_layout.setWidget(0, QFormLayout.FieldRole, id_edit)
-        self.form_layout.setWidget(1, QFormLayout.FieldRole, duty_editor)
-        self.form_layout.setWidget(2, QFormLayout.FieldRole, factor_editor)
-        self.form_layout.setWidget(3, QFormLayout.FieldRole, type_combo)
+        ex_list = ExchangerType.values_list()
+        type_combo.addItems(ex_list)
+        type_combo.currentTextChanged.connect(self._update_arrangment)
+        type_combo.currentTextChanged.connect(self._update_shell_materials)
+
+        shell_combo.currentTextChanged.connect(self._update_tube_materials)
+
+        self._type_combo = type_combo
+        self._arrang_combo = arrang_combo
+        self._shell_combo = shell_combo
+        self._tube_combo = tube_combo
+
+        type_combo.setCurrentIndex(
+            ex_list.index(ExchangerType.FLOATING_HEAD.value)
+        )
+
+        form_layout = QFormLayout()
+        form_layout.setLabelAlignment(Qt.AlignRight)
+        form_layout.setWidget(0, QFormLayout.LabelRole, label1)
+        form_layout.setWidget(1, QFormLayout.LabelRole, label2)
+        form_layout.setWidget(2, QFormLayout.LabelRole, label3)
+        form_layout.setWidget(3, QFormLayout.LabelRole, label4)
+        form_layout.setWidget(4, QFormLayout.LabelRole, label5)
+        form_layout.setWidget(5, QFormLayout.LabelRole, label6)
+        form_layout.setWidget(6, QFormLayout.LabelRole, label7)
+        form_layout.setWidget(7, QFormLayout.LabelRole, label8)
+
+        form_layout.setWidget(0, QFormLayout.FieldRole, id_edit)
+        form_layout.setWidget(1, QFormLayout.FieldRole, duty_editor)
+        form_layout.setWidget(2, QFormLayout.FieldRole, factor_editor)
+        form_layout.setWidget(3, QFormLayout.FieldRole, type_combo)
+        form_layout.setWidget(4, QFormLayout.FieldRole, arrang_combo)
+        form_layout.setWidget(5, QFormLayout.FieldRole, shell_combo)
+        form_layout.setWidget(6, QFormLayout.FieldRole, tube_combo)
+        form_layout.setWidget(7, QFormLayout.FieldRole, pressure_editor)
+
+        self.form_layout = form_layout
 
         self.button_box = QDialogButtonBox(self)
         self.button_box.setOrientation(Qt.Horizontal)
@@ -636,9 +678,45 @@ class ExchangerInputDialog(QDialog):
         self.grid_layout.addLayout(self.form_layout, 0, 0, 1, 1)
         self.grid_layout.addWidget(self.button_box, 1, 0, 1, 1)
 
+    def _update_arrangment(self, ex: str) -> None:
+        arrangements = COST_DATA.loc[(ex), :].index.get_level_values(
+            'ARRANGEMENT').unique().tolist()
+
+        self._arrang_combo.clear()
+        self._arrang_combo.addItems(arrangements)
+
+    def _update_shell_materials(self, ex: str) -> None:
+        shells = MATERIAL_DATA.loc[(ex), :].index.get_level_values(
+            'SHELL').unique()
+        if shells.isna().any():
+            nan_idx = shells.isna()
+            shells = shells.values
+            shells[nan_idx] = 'None'
+        shells = shells.tolist()
+
+        self._shell_combo.clear()
+        self._shell_combo.addItems(shells)
+
+    def _update_tube_materials(self, shell: str) -> None:
+        if shell in ['', 'None']:
+            return
+
+        ex = self._type_combo.currentText()
+        tube = MATERIAL_DATA.loc[(ex, shell), :].index.get_level_values(
+            'TUBE').unique()
+        if tube.isna().any():
+            nan_idx = tube.isna()
+            tube = tube.values
+            tube[nan_idx] = 'None'
+        tube = tube.tolist()
+
+        self._tube_combo.clear()
+        self._tube_combo.addItems(tube)
+
     def check_inputs(self):
         id_ex = self._id_edit.text()
         duty = self._duty_editor.text()
+        pressure = self._pressure_editor.text()
         factor = self._factor_editor.text()
 
         state = self._duty_editor.validator().validate(id_ex, len(id_ex))[2]
@@ -655,6 +733,17 @@ class ExchangerInputDialog(QDialog):
             is_duty_valid = True
 
         try:
+            pressure = float(pressure)
+        except ValueError as ex:
+            is_pressure_valid = False
+        else:
+            validator = self._pressure_editor.validator()
+            if validator.bottom() <= pressure <= validator.top():
+                is_pressure_valid = True
+            else:
+                is_pressure_valid = False
+
+        try:
             factor = float(factor)
         except ValueError as ex:
             is_factor_valid = False
@@ -665,7 +754,8 @@ class ExchangerInputDialog(QDialog):
             else:
                 is_factor_valid = False
 
-        if is_id_valid and is_duty_valid and is_factor_valid:
+        if is_id_valid and is_duty_valid and is_pressure_valid and \
+                is_factor_valid:
             self.button_box.button(QDialogButtonBox.Ok).setEnabled(True)
         else:
             self.button_box.button(QDialogButtonBox.Ok).setEnabled(False)
@@ -673,11 +763,16 @@ class ExchangerInputDialog(QDialog):
     def on_ok_pressed(self):
         ex_id = self._id_edit.text()
         ex_duty = float(self._duty_editor.text())
-        ex_type = self._type_combo.currentText()
+        ex_type = ExchangerType(self._type_combo.currentText())
+        ex_arr = ArrangementType(self._arrang_combo.currentText())
+        ex_shell = MaterialType(self._shell_combo.currentText())
+        ex_tube = MaterialType(self._tube_combo.currentText())
+        ex_pres = float(self._pressure_editor.text())
         ex_factor = float(self._factor_editor.text())
 
         self._setup.add_exchanger(self._des_type, ex_id, ex_duty,
-                                  self._interval, self._source, self._dest)
+                                  self._interval, self._source, self._dest,
+                                  ex_type, ex_arr, ex_shell, ex_tube, ex_pres)
 
 
 class SplitStreamDialog(QDialog):

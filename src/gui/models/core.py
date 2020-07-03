@@ -6,16 +6,18 @@ import numpy as np
 import pandas as pd
 from PyQt5.QtCore import QObject, pyqtSignal
 
-from hensad import (BaseUnits, FilmCoefficientsFrameMapper,
+from hensad import (COST_DATA, MATERIAL_DATA, ArrangementType, BaseUnits,
+                    ExchangerType, FilmCoefficientsFrameMapper,
                     HeatExchangerDesignFrameMapper, HeatFlowFrameMapper,
-                    SegmentsFrameMapper, SIUnits,
+                    MaterialType, SegmentsFrameMapper, SIUnits,
                     StreamFilmCoefficientFrameMapper, StreamFrameMapper,
-                    SummaryFrameMapper, USUnits, calculate_composite_enthalpy,
-                    calculate_exchanger_area, calculate_heat_flows,
-                    calculate_intervals, calculate_log_mean_diff,
-                    calculate_minimum_exchangers, calculate_number_of_shells,
-                    calculate_pinch_utilities, calculate_segments_data,
-                    calculate_summary_table, pinch_streams_tables)
+                    SummaryFrameMapper, USUnits, calculate_bare_module_cost,
+                    calculate_composite_enthalpy, calculate_exchanger_area,
+                    calculate_heat_flows, calculate_intervals,
+                    calculate_log_mean_diff, calculate_minimum_exchangers,
+                    calculate_number_of_shells, calculate_pinch_utilities,
+                    calculate_segments_data, calculate_summary_table,
+                    pinch_streams_tables)
 
 STFM = StreamFrameMapper
 SFM = SummaryFrameMapper
@@ -30,7 +32,10 @@ HEDFM_STR_COLS = [
     HEDFM.INT.name,
     HEDFM.SOURCE.name,
     HEDFM.DEST.name,
-    HEDFM.TYPE.name
+    HEDFM.TYPE.name,
+    HEDFM.ARRANGEMENT.name,
+    HEDFM.SHELL.name,
+    HEDFM.TUBE.name
 ]
 
 EMPTY_SUMMARY = pd.DataFrame(columns=SFM.columns())
@@ -565,7 +570,10 @@ class Setup(QObject):
 
     def add_exchanger(self, des_type: str, ex_id: str, duty: float,
                       interval: str, stream_source: str,
-                      stream_dest: str) -> None:
+                      stream_dest: str, ex_type: ExchangerType,
+                      arrangement: ArrangementType,
+                      shell_mat: MaterialType, tube_mat: MaterialType,
+                      pressure: float) -> None:
         """Adds a single process exchanger on the specified design type
         (above or below the pinch).
 
@@ -583,6 +591,16 @@ class Setup(QObject):
             Heat source (hot) stream ID.
         stream_dest : str
             Heat destination (cold) stream ID.
+        ex_type : ExchangerType
+            Type of heat exchanger (See ExchangerType enumerator for options).
+        arrangement : ArrangementType
+            Type of tube arranagement (See ArrangementType enumerator).
+        shell_mat : MaterialType
+            Type of material of the exchanger shell side.
+        tube_mat : MaterialType
+            Type of material of the exchanger tube side.
+        pressure : float
+            Heat exchanger operating pressure.
         """
         # input sanitation
         if des_type == 'abv':
@@ -713,14 +731,15 @@ class Setup(QObject):
                        "Minimum approach = {1}").format(dtln, self.dt)
             raise ValueError(err_msg)
 
-        # exchanger type
-        ex_type = '1-2 S&T'  # default exchanger, for now
-
         # log mean correction factor
         f = 0.8
 
         # area and overall heat coefficient
         a, u = calculate_exchanger_area(duty, dtln, hot_coef, cold_coef, f)
+
+        # exchanger costs
+        cbm = calculate_bare_module_cost(ex_type, arrangement, shell_mat,
+                                         tube_mat, a, pressure)
 
         # number of shells
         h_str = {
@@ -744,9 +763,13 @@ class Setup(QObject):
             HEDFM.ID.name: ex_id,
             HEDFM.INT.name: interval,
             HEDFM.DUTY.name: duty,
+            HEDFM.COST.name: cbm,
+            HEDFM.TYPE.name: ex_type.value,
+            HEDFM.ARRANGEMENT.name: arrangement.value,
+            HEDFM.SHELL.name: shell_mat.value,
+            HEDFM.TUBE.name: tube_mat.value,
             HEDFM.SOURCE.name: stream_source,
             HEDFM.DEST.name: stream_dest,
-            HEDFM.TYPE.name: ex_type,
             HEDFM.HOT_IN.name: h_tin,
             HEDFM.HOT_OUT.name: h_tout,
             HEDFM.COLD_IN.name: c_tin,
@@ -820,19 +843,19 @@ class Setup(QObject):
         cold_film.index = cold_film.index.astype(int)
 
         # ------------------------------ Designs ------------------------------
-        design_above = pd.DataFrame(hsd['design_above'])
-        design_above = design_above.astype(
-            {key: float if key not in HEDFM_STR_COLS else object
-             for key in HEDFM.columns()}
-        )
-        design_above.index = design_above.index.astype(int)
+        # design_above = pd.DataFrame(hsd['design_above'])
+        # design_above = design_above.astype(
+        #     {key: float if key not in HEDFM_STR_COLS else object
+        #      for key in HEDFM.columns()}
+        # )
+        # design_above.index = design_above.index.astype(int)
 
-        design_below = pd.DataFrame(hsd['design_below'])
-        design_below = design_below.astype(
-            {key: float if key not in HEDFM_STR_COLS else object
-             for key in HEDFM.columns()}
-        )
-        design_below.index = design_below.index.astype(int)
+        # design_below = pd.DataFrame(hsd['design_below'])
+        # design_below = design_below.astype(
+        #     {key: float if key not in HEDFM_STR_COLS else object
+        #      for key in HEDFM.columns()}
+        # )
+        # design_below.index = design_below.index.astype(int)
 
         # ---------------------------------------------------------------------
 
@@ -848,8 +871,8 @@ class Setup(QObject):
 
         self.dt = hsd['dt']
 
-        self.design_above = design_above
-        self.design_below = design_below
+        # self.design_above = design_above
+        # self.design_below = design_below
 
     def save(self, filename: str) -> None:
         dump = {
