@@ -573,7 +573,7 @@ class Setup(QObject):
                       stream_dest: str, ex_type: ExchangerType,
                       arrangement: ArrangementType,
                       shell_mat: MaterialType, tube_mat: MaterialType,
-                      pressure: float) -> None:
+                      pressure: float, factor: float) -> None:
         """Adds a single process exchanger on the specified design type
         (above or below the pinch).
 
@@ -601,6 +601,8 @@ class Setup(QObject):
             Type of material of the exchanger tube side.
         pressure : float
             Heat exchanger operating pressure.
+        factor : float
+            Correction factor.
         """
         # input sanitation
         if des_type == 'abv':
@@ -732,7 +734,7 @@ class Setup(QObject):
             raise ValueError(err_msg)
 
         # log mean correction factor
-        f = 0.8
+        f = factor
 
         # area and overall heat coefficient
         a, u = calculate_exchanger_area(duty, dtln, hot_coef, cold_coef, f)
@@ -779,6 +781,168 @@ class Setup(QObject):
             HEDFM.F.name: f,
             HEDFM.A.name: a,
             HEDFM.NSHELL.name: n_shells
+        }
+
+        design = design.append(new_row, ignore_index=True)
+        if des_type == 'abv':
+            self.design_above = design
+        else:
+            self.design_below = design
+
+    def add_utility_exchanger(self, des_type: str, ex_id: str, duty: float,
+                              interval: str, utility_type: str,
+                              stream_id: str, ut_in: float, ut_out: float,
+                              ut_coef: float, ex_type: ExchangerType,
+                              arrangement: ArrangementType,
+                              shell_mat: MaterialType, tube_mat: MaterialType,
+                              pressure: float, factor: float) -> None:
+        # input sanitation
+        if des_type == 'abv':
+            hot_df = self.hot_above
+            cold_df = self.cold_above
+            design = self.design_above
+            allowed_ex = self.above_min_exchangers
+        elif des_type == 'blw':
+            hot_df = self.hot_below
+            cold_df = self.cold_below
+            design = self.design_below
+            allowed_ex = self.below_min_exchangers
+        else:
+            raise ValueError("Invalid design choice.")
+
+        if len(design) >= allowed_ex:
+            raise ValueError(
+                "Maximum number of exchangers is {0}".format(allowed_ex)
+            )
+
+        # check if the input film coefficients are available
+        if self.hot_film_coef.empty or self.cold_film_coef.empty or \
+            self.hot_film_coef.isna().any(axis=None) or \
+                self.cold_film_coef.isna().any(axis=None):
+            raise ValueError("Heat transfer film coefficients must be set.")
+
+        # check if exchanger id is unique
+        if ex_id in design[HEDFM.ID.name].values:
+            raise ValueError("Heat exchanger ID must be unique.")
+
+        if utility_type == 'hot':
+            if stream_id not in cold_df[STFM.ID.name].values:
+                raise KeyError("Stream {0} not found.".format(stream_id))
+            else:
+                stream_info = cold_df.loc[
+                    cold_df[STFM.ID.name] == stream_id, :
+                ]
+                coef = cold_df.loc[
+                    cold_df[STFCFM.ID.name] == stream_id,
+                    STFCFM.COEF.name
+                ].item()
+
+                stream_source = 'Hot utility'
+                stream_dest = stream_id
+
+        else:
+            if stream_id not in hot_df[STFM.ID.name].values:
+                raise KeyError("Stream {0} not found.".format(stream_id))
+            else:
+                stream_info = hot_df.loc[hot_df[STFM.ID.name] == stream_id, :]
+                coef = hot_df.loc[
+                    hot_df[STFCFM.ID.name] == stream_id,
+                    STFCFM.COEF.name
+                ].item()
+
+                stream_source = stream_id
+                stream_dest = 'Cold utility'
+
+        cp = stream_info[STFM.CP.name].item()
+        mf = stream_info[STFM.FLOW.name].item()
+
+        if utility_type == 'hot':
+            # if the stream_id (cold) already receives heat, get maximum
+            # cold outlet temperature
+            if stream_id in design[HEDFM.DEST.name].values:
+                # maximum outlet temperature
+                tin = design.loc[
+                    design[HEDFM.DEST.name] == stream_id,
+                    HEDFM.COLD_OUT.name
+                ].max()
+            else:
+                tin = stream_info[STFM.TIN.name].item()
+
+            tout = stream_info[STFM.TOUT.name].item()
+
+        else:
+            # if the stream_id (hot) already receives heat, get the minimum
+            # hot outlet temperature
+            if stream_id in design[HEDFM.SOURCE.name].values:
+                # minimum inlet temperature
+                tin = design.loc[
+                    design[HEDFM.SOURCE.name] == stream_id,
+                    HEDFM.HOT_OUT.name
+                ].min()
+            else:
+                tin = stream_info[STFM.TIN.name].item()
+
+            tout = stream_info[STFM.TOUT.name].item()
+
+        # 4 digits rounding
+        if duty > np.around(np.abs(mf * cp * (tin - tout)), 4):
+            raise ValueError("The specified heat duty is not feasible for the "
+                             "stream.")
+        else:
+            # actual outlet temperature
+            if utility_type == 'hot':
+                tout = tin + duty / (mf * cp)
+
+                h_tin = ut_in
+                h_tout = ut_out
+                c_tin = tin
+                c_tout = tout
+                hot_coef = ut_coef
+                cold_coef = coef
+            else:
+                tout = tin - duty / (mf * cp)
+
+                h_tin = tin
+                h_tout = tout
+                c_tin = ut_in
+                c_tout = ut_out
+                hot_coef = coef
+                cold_coef = ut_coef
+
+        # log mean correction factor
+        f = factor
+
+        # log mean temp
+        dtln = calculate_log_mean_diff('counter', h_tin, h_tout, c_tin, c_tout)
+
+        # area and overall heat coefficient
+        a, u = calculate_exchanger_area(duty, dtln, hot_coef, cold_coef, f)
+
+        # exchanger costs
+        cbm = calculate_bare_module_cost(ex_type, arrangement, shell_mat,
+                                         tube_mat, a, pressure)
+
+        # store the exchanger data
+        new_row = {
+            HEDFM.ID.name: ex_id,
+            HEDFM.INT.name: interval,
+            HEDFM.DUTY.name: duty,
+            HEDFM.COST.name: cbm,
+            HEDFM.TYPE.name: ex_type.value,
+            HEDFM.ARRANGEMENT.name: arrangement.value,
+            HEDFM.SHELL.name: shell_mat.value,
+            HEDFM.TUBE.name: tube_mat.value,
+            HEDFM.SOURCE.name: stream_source,
+            HEDFM.DEST.name: stream_dest,
+            HEDFM.HOT_IN.name: h_tin,
+            HEDFM.HOT_OUT.name: h_tout,
+            HEDFM.COLD_IN.name: c_tin,
+            HEDFM.COLD_OUT.name: c_tout,
+            HEDFM.DT.name: dtln,
+            HEDFM.U.name: u,
+            HEDFM.F.name: f,
+            HEDFM.A.name: a,
+            HEDFM.NSHELL.name: 0
         }
 
         design = design.append(new_row, ignore_index=True)
@@ -843,19 +1007,48 @@ class Setup(QObject):
         cold_film.index = cold_film.index.astype(int)
 
         # ------------------------------ Designs ------------------------------
-        # design_above = pd.DataFrame(hsd['design_above'])
-        # design_above = design_above.astype(
-        #     {key: float if key not in HEDFM_STR_COLS else object
-        #      for key in HEDFM.columns()}
-        # )
-        # design_above.index = design_above.index.astype(int)
+        design = hsd['design']
+        design_above = pd.DataFrame(design['above']['exchangers'])
+        design_above = design_above.astype(
+            {key: float if key not in HEDFM_STR_COLS else object
+             for key in HEDFM.columns()}
+        )
+        design_above.index = design_above.index.astype(int)
 
-        # design_below = pd.DataFrame(hsd['design_below'])
-        # design_below = design_below.astype(
-        #     {key: float if key not in HEDFM_STR_COLS else object
-        #      for key in HEDFM.columns()}
-        # )
-        # design_below.index = design_below.index.astype(int)
+        hot_above = pd.DataFrame(design['above']['hot'])
+        hot_above = hot_above.astype(
+            {key: float if key != STFM.ID.name else object
+             for key in STFM.columns()}
+        )
+        hot_above.index = hot_above.index.astype(int)
+
+        cold_above = pd.DataFrame(design['above']['cold'])
+        cold_above = cold_above.astype(
+            {key: float if key != STFM.ID.name else object
+             for key in STFM.columns()}
+        )
+        cold_above.index = cold_above.index.astype(int)
+
+        design_below = pd.DataFrame(design['below']['exchangers'])
+        design_below = design_below.astype(
+            {key: float if key not in HEDFM_STR_COLS else object
+             for key in HEDFM.columns()}
+        )
+        design_below.index = design_below.index.astype(int)
+
+        hot_below = pd.DataFrame(design['below']['hot'])
+        hot_below = hot_below.astype(
+            {key: float if key != STFM.ID.name else object
+             for key in STFM.columns()}
+        )
+        hot_below.index = hot_below.index.astype(int)
+
+        cold_below = pd.DataFrame(design['below']['cold'])
+        cold_below = cold_below.astype(
+            {key: float if key != STFM.ID.name else object
+             for key in STFM.columns()}
+        )
+        cold_below.index = cold_below.index.astype(int)
 
         # ---------------------------------------------------------------------
 
@@ -871,8 +1064,12 @@ class Setup(QObject):
 
         self.dt = hsd['dt']
 
-        # self.design_above = design_above
-        # self.design_below = design_below
+        self._hot_above = hot_above
+        self._cold_above = cold_above
+        self._hot_below = hot_below
+        self._cold_below = cold_below
+        self.design_above = design_above
+        self.design_below = design_below
 
     def save(self, filename: str) -> None:
         dump = {
@@ -881,8 +1078,19 @@ class Setup(QObject):
             'cold': self.cold.to_dict(),
             'hot_film': self.hot_film_coef.to_dict(),
             'cold_film': self.cold_film_coef.to_dict(),
-            'design_above': self.design_above.to_dict(),
-            'design_below': self.design_below.to_dict()
+            'design': {
+                'above': {
+                    'exchangers': self.design_above.to_dict(),
+                    'hot': self.hot_above.to_dict(),
+                    'cold': self.cold_above.to_dict()
+                },
+                'below': {
+                    'exchangers': self.design_below.to_dict(),
+                    'hot': self.hot_below.to_dict(),
+                    'cold': self.cold_below.to_dict()
+                }
+
+            }
         }
 
         with open(filename, 'w') as fp:

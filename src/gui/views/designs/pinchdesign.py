@@ -14,7 +14,7 @@ from PyQt5.QtWidgets import (QAction, QApplication, QComboBox, QDialog,
                              QGraphicsSceneMouseEvent, QGraphicsView,
                              QGridLayout, QHeaderView, QLabel, QLineEdit,
                              QMenu, QStyleOptionGraphicsItem, QTableView,
-                             QVBoxLayout, QWidget)
+                             QVBoxLayout, QWidget, QGraphicsEllipseItem)
 
 from gui.models.core import (COST_DATA, HEDFM, MATERIAL_DATA, SFM, STFCFM,
                              STFM, ArrangementType, ExchangerType,
@@ -34,25 +34,79 @@ class NamedArrow(ArrowItem):
         super().__init__(x1, y1, x2, y2, color=color, width=width,
                          parent=parent)
 
-    def _create_menu(self):
+    def _create_menu(self) -> None:
         split_icon = QIcon()
         self._split_action = QAction(
             split_icon, "Split stream", self.scene()
         )
         self._split_action.triggered.connect(self._split_stream)
+
+        util_icon = QIcon()
+        self._utility_action = QAction(
+            util_icon, "Insert Utility Exchanger", self.scene()
+        )
+        self._utility_action.triggered.connect(self._add_utility_echanger)
+
         self.context_menu = QMenu()
         self.context_menu.addAction(self._split_action)
+        self.context_menu.addAction(self._utility_action)
 
-    def _split_stream(self):
+    def _split_stream(self) -> None:
         scene = self.scene()
         stream_type = 'hot' if type(self) == LiveArrowItem else 'cold'
         stream_id = self.name
         dialog = SplitStreamDialog(stream_id, stream_type, scene)
         dialog.exec_()
 
+    def _add_utility_echanger(self) -> None:
+        # get which design scene and interval the exchanger is to be added
+        scene = self.scene()
+        des_type = scene._des_type
+        interval = np.unique(
+            scene._hot_str.loc[
+                :,
+                [STFCFM.TIN.name, STFCFM.TOUT.name]
+            ].values
+        )
+
+        source_inter = scene._px_to_interval(
+            self._context_ypos_click, interval
+        )
+        setup = scene._setup
+        summary = setup.summary
+        pinch = setup.pinch
+        if des_type == 'abv':
+            summary_indexer = summary[SFM.TOUT.name] >= pinch
+        else:
+            summary_indexer = summary[SFM.TIN.name] <= pinch
+
+        summary = summary.loc[
+            summary_indexer,
+            :
+        ].reset_index(drop=True)
+        inter = summary.at[source_inter, SFM.INTERVAL.name]
+
+        if type(self) == NamedArrow:
+            # inject heat from hot utility into cold stream
+            source_name = 'Hot utility'
+            dest_name = self.name
+
+        elif type(self) == LiveArrowItem:
+            # extract heat from hot stream into cold utility
+            source_name = self.name
+            dest_name = 'Cold utility'
+
+        dialog = ExchangerInputDialog('utility', des_type,
+                                      inter,
+                                      source_name, dest_name,
+                                      setup)
+        dialog.exec_()
+
     def contextMenuEvent(self, event: QGraphicsSceneContextMenuEvent):
         self.scene().clearSelection()
         self.setSelected(True)
+
+        self._context_ypos_click = event.scenePos().y()
 
         self._create_menu()
 
@@ -78,7 +132,7 @@ class LiveArrowItem(NamedArrow):
         return super().hoverLeaveEvent(event)
 
 
-class ExchangerItem(QGraphicsLineItem):
+class ProcessExchangerItem(QGraphicsLineItem):
     def __init__(self, x1: float, y1: float, x2: float, y2: float,
                  label: str, duty: float, des_type: str, setup: Setup,
                  color: QColor = Qt.black, width: int = 2,
@@ -89,7 +143,6 @@ class ExchangerItem(QGraphicsLineItem):
         self._des_type = des_type
         self._setup = setup
 
-        self._ex_path = QPainterPath()
         self._ex_label_radius = 20  # pixels
 
         pen = QPen(color, width, style=Qt.SolidLine,
@@ -203,43 +256,148 @@ class ExchangerItem(QGraphicsLineItem):
         self.context_menu.exec_(event.screenPos())
 
 
+class UtilityExchangerItem(QGraphicsEllipseItem):
+    def __init__(self, x: float, y: float, label: str, duty: float,
+                 des_type: str, setup: Setup, d: float = 40.0,
+                 color: QColor = Qt.black, width: int = 2,
+                 parent: QGraphicsItem = None):
+        # the 'x' and 'y' in this case refers to the center of the circle
+        super().__init__(x - 0.5 * d, y - 0.5 * d, d, d, parent=parent)
+
+        self._label = label
+        self._duty = duty
+        self._des_type = des_type
+        self._setup = setup
+
+        self._d = d
+
+        pen = QPen(color, width, style=Qt.SolidLine,
+                   cap=Qt.RoundCap, join=Qt.RoundJoin)
+        self.setPen(pen)
+        self.setBrush(Qt.white)
+
+    def _create_action(self) -> None:
+        del_icon = QIcon()
+        del_icon.addPixmap(
+            QPixmap(":/streams/delete_icon.svg"), QIcon.Normal, QIcon.Off
+        )
+        self._delete_action = QAction(
+            del_icon, "Delete exchanger", self.scene()
+        )
+        self._delete_action.triggered.connect(self._delete_exchanger)
+
+    def _create_context_menu(self) -> None:
+        self.context_menu = QMenu()
+        self.context_menu.addAction(self._delete_action)
+
+    def _delete_exchanger(self):
+        self._setup.delete_exchanger(self._label, self._des_type)
+
+    def paint(self, painter: QPainter, option: QStyleOptionGraphicsItem,
+              widget: QWidget = None) -> None:
+        super().paint(painter, option, widget)
+
+        # write the label
+        font = QFont()
+        font.setBold(True)
+        fm = QFontMetrics(font)
+        label_text = self._label + '\n{0:.6g}'.format(self._duty)
+
+        # measure the text height and width
+        rect = fm.boundingRect(
+            QApplication.desktop().geometry(),
+            Qt.TextWordWrap | Qt.AlignCenter,
+            label_text
+        )
+        label_width = rect.width()
+        label_height = rect.height()
+
+        # draw the text
+        x = self.rect().x()
+        y = self.rect().y()
+        d = self._d
+
+        mid_x = x + d * 0.5
+        mid_y = y + d * 0.5
+
+        painter.setFont(font)
+        painter.drawText(
+            QRectF(
+                mid_x - 0.5 * label_width, mid_y - 0.5 * label_height,
+                label_width, label_height
+            ),
+            Qt.AlignCenter,
+            label_text,
+        )
+
+    def contextMenuEvent(self, event: QGraphicsSceneContextMenuEvent):
+        self.scene().clearSelection()
+        self.setSelected(True)
+
+        self._create_action()
+        self._create_context_menu()
+
+        # call the context menu at the item position
+        self.context_menu.exec_(event.screenPos())
+
+
 class PinchDesignDialog(QDialog):
-    def __init__(self, setup: Setup, design_type: str):
+    def __init__(self, setup: Setup):
         super().__init__()
         self.resize(1024, 800)
         self.setMinimumSize(QSize(1024, 800))
         self.setWindowFlags(Qt.Window)
 
         self._setup = setup
-        self._design_type = design_type
 
         self.createUi()
 
     def createUi(self):
-        self.table_view = QTableView(self)
-        table_model = ExchangerDesignTableModel(
-            self._setup, self._design_type, self.table_view
+        above_table_view = QTableView(self)
+        above_table_model = ExchangerDesignTableModel(
+            self._setup, 'abv', above_table_view
         )
-        self.table_view.setModel(table_model)
-        self.table_view.setMinimumHeight(100)
-        self.table_view.setMaximumHeight(150)
+        above_table_view.setModel(above_table_model)
+        above_table_view.setMinimumHeight(100)
+        above_table_view.setMaximumHeight(150)
 
         largest_header = max(HEDFM.headers(), key=len)
         font = QFont()
         font.setBold(True)
         fm = QFontMetrics(font)
-        header = self.table_view.horizontalHeader()
+        header = above_table_view.horizontalHeader()
         header.setMinimumSectionSize(fm.horizontalAdvance(largest_header))
         header.setSectionResizeMode(QHeaderView.Stretch)
 
-        self.view = QGraphicsView(self)
-        self.scene = PinchDesignScene(self._design_type,
-                                      self._setup, self.view)
-        self.view.setScene(self.scene)
+        below_table_view = QTableView(self)
+        below_table_model = ExchangerDesignTableModel(
+            self._setup, 'blw', below_table_view
+        )
+        below_table_view.setModel(below_table_model)
+        below_table_view.setMinimumHeight(100)
+        below_table_view.setMaximumHeight(150)
 
-        layout = QVBoxLayout()
-        layout.addWidget(self.table_view)
-        layout.addWidget(self.view)
+        largest_header = max(HEDFM.headers(), key=len)
+        fm = QFontMetrics(font)
+        header = below_table_view.horizontalHeader()
+        header.setMinimumSectionSize(fm.horizontalAdvance(largest_header))
+        header.setSectionResizeMode(QHeaderView.Stretch)
+
+        self.above_view = QGraphicsView(self)
+        self.above_scene = PinchDesignScene(
+            'abv', self._setup, self.above_view)
+        self.above_view.setScene(self.above_scene)
+
+        self.below_view = QGraphicsView(self)
+        self.below_scene = PinchDesignScene(
+            'blw', self._setup, self.below_view)
+        self.below_view.setScene(self.below_scene)
+
+        layout = QGridLayout()
+        layout.addWidget(above_table_view, 0, 0, 1, 1)
+        layout.addWidget(self.above_view, 1, 0, 1, 1)
+        layout.addWidget(below_table_view, 0, 1, 1, 1)
+        layout.addWidget(self.below_view, 1, 1, 1, 1)
         self.setLayout(layout)
 
     def showEvent(self, event: QShowEvent):
@@ -253,17 +411,27 @@ class PinchDesignDialog(QDialog):
         return super().resizeEvent(event)
 
     def resize_scene(self):
-        view = self.view
-        scene = self.scene
+        above_view = self.above_view
+        above_scene = self.above_scene
 
-        width = view.viewport().width()
-        height = view.viewport().height()
+        width = above_view.viewport().width()
+        height = above_view.viewport().height()
 
-        scene.setSceneRect(0, 0, width, height)
-        scene.paint_interval_diagram()
-        scene.paint_exchangers()
+        above_scene.setSceneRect(0, 0, width, height)
+        above_scene.paint_interval_diagram()
+        above_scene.paint_exchangers()
 
-        view.fitInView(scene.sceneRect(), Qt.IgnoreAspectRatio)
+        below_view = self.below_view
+        below_scene = self.below_scene
+
+        width = below_view.viewport().width()
+        height = below_view.viewport().height()
+
+        below_scene.setSceneRect(0, 0, width, height)
+        below_scene.paint_interval_diagram()
+        below_scene.paint_exchangers()
+
+        below_view.fitInView(below_scene.sceneRect(), Qt.IgnoreAspectRatio)
 
 
 class PinchDesignScene(QGraphicsScene):
@@ -488,20 +656,36 @@ class PinchDesignScene(QGraphicsScene):
                     tin_px = self._map_y(self._temp_to_px(tin, interval))
                     y = (i_ex + 0.5) * sub_int_height + tin_px
 
-                    # determine the line tips
                     ex_label = ex[HEDFM.ID.name]
                     ex_duty = ex[HEDFM.DUTY.name]
                     src_strm = ex[HEDFM.SOURCE.name]
                     dst_strm = ex[HEDFM.DEST.name]
-                    source_x = self._hot_strm_arrows[src_strm].line().x1()
-                    dest_x = self._cold_strm_arrows[dst_strm].line().x1()
 
-                    # paint the exchanger
-                    ex_item = ExchangerItem(
-                        source_x, y, dest_x, y,
-                        ex_label, ex_duty,
-                        self._des_type, self._setup
-                    )
+                    if src_strm == 'Hot utility' or dst_strm == 'Cold utility':
+                        # utility exchanger
+                        if src_strm == 'Hot utility':
+                            x = self._cold_strm_arrows[dst_strm].line().x1()
+                        elif dst_strm == 'Cold utility':
+                            x = self._hot_strm_arrows[src_strm].line().x1()
+
+                        ex_item = UtilityExchangerItem(
+                            x, y, ex_label, ex_duty,
+                            self._setup, self._des_type
+                        )
+
+                    else:
+                        # process exchanger
+                        # determine the line tips
+                        source_x = self._hot_strm_arrows[src_strm].line().x1()
+                        dest_x = self._cold_strm_arrows[dst_strm].line().x1()
+
+                        # paint the exchanger
+                        ex_item = ProcessExchangerItem(
+                            source_x, y, dest_x, y,
+                            ex_label, ex_duty,
+                            self._des_type, self._setup
+                        )
+
                     scene.addItem(ex_item)
                     self._design_lines.append(ex_item)
 
@@ -546,12 +730,17 @@ class PinchDesignScene(QGraphicsScene):
                     # if the intervals of the clicks are the same, prompt user
                     summary = self._setup.summary
                     pinch = self._setup.pinch
+                    if self._des_type == 'abv':
+                        summary_indexer = summary[SFM.TOUT.name] >= pinch
+                    else:
+                        summary_indexer = summary[SFM.TIN.name] <= pinch
                     summary = summary.loc[
-                        summary[SFM.TIN.name] <= pinch,
+                        summary_indexer,
                         :
                     ].reset_index(drop=True)
                     inter = summary.at[source_inter, SFM.INTERVAL.name]
-                    dialog = ExchangerInputDialog(self._des_type, inter,
+                    dialog = ExchangerInputDialog('process', self._des_type,
+                                                  inter,
                                                   self._source_item, item.name,
                                                   self._setup)
                     dialog.exec_()
@@ -560,9 +749,10 @@ class PinchDesignScene(QGraphicsScene):
 
 
 class ExchangerInputDialog(QDialog):
-    def __init__(self, des_type: str, interval: str, source: str, dest: str,
-                 setup: Setup, parent=None):
+    def __init__(self, ex_type: str, des_type: str, interval: str, source: str,
+                 dest: str, setup: Setup, parent=None):
         super().__init__(parent=parent)
+        self._ex_type = ex_type  # whether 'process' or 'utility' exchanger
         self.createUi()
 
         self._des_type = des_type
@@ -659,13 +849,55 @@ class ExchangerInputDialog(QDialog):
         form_layout.setWidget(6, QFormLayout.FieldRole, tube_combo)
         form_layout.setWidget(7, QFormLayout.FieldRole, pressure_editor)
 
-        self.form_layout = form_layout
-
         self.button_box = QDialogButtonBox(self)
         self.button_box.setOrientation(Qt.Horizontal)
         self.button_box.setStandardButtons(
             QDialogButtonBox.Ok | QDialogButtonBox.Cancel
         )
+
+        if self._ex_type == 'utility':
+            # additional fields for utility exchanger input
+            label9 = QLabel('Utility Inlet Temperature:', self)
+            label10 = QLabel('Utility Outlet Temperature:', self)
+            label11 = QLabel('Utility film coefficient:', self)
+
+            ut_in_validator = QDoubleValidator(0.0, 1.0e9, _MAX_NUM_DIGITS)
+            ut_out_validator = QDoubleValidator(0.0, 1.0e9, _MAX_NUM_DIGITS)
+            ut_coef_validator = QDoubleValidator(0.0, 1.0e9, _MAX_NUM_DIGITS)
+
+            ut_in_editor = QLineEdit(self)
+            ut_in_editor.setAlignment(Qt.AlignCenter)
+            ut_in_editor.setValidator(ut_in_validator)
+            ut_in_editor.textChanged.connect(self.check_inputs)
+            self._ut_in_editor = ut_in_editor
+
+            ut_out_editor = QLineEdit(self)
+            ut_out_editor.setAlignment(Qt.AlignCenter)
+            ut_out_editor.setValidator(ut_out_validator)
+            ut_out_editor.textChanged.connect(self.check_inputs)
+            self._ut_out_editor = ut_out_editor
+
+            ut_coef_editor = QLineEdit(self)
+            ut_coef_editor.setAlignment(Qt.AlignCenter)
+            ut_coef_editor.setValidator(ut_coef_validator)
+            ut_coef_editor.textChanged.connect(self.check_inputs)
+            self._ut_coef_editor = ut_coef_editor
+
+            form_layout.setWidget(8, QFormLayout.LabelRole, label9)
+            form_layout.setWidget(9, QFormLayout.LabelRole, label10)
+            form_layout.setWidget(10, QFormLayout.LabelRole, label11)
+
+            form_layout.setWidget(8, QFormLayout.FieldRole, ut_in_editor)
+            form_layout.setWidget(9, QFormLayout.FieldRole, ut_out_editor)
+            form_layout.setWidget(10, QFormLayout.FieldRole, ut_coef_editor)
+
+            id_edit.setText("E5")
+            duty_editor.setText("100")
+            ut_in_editor.setText("255")
+            ut_out_editor.setText("255")
+            ut_coef_editor.setText("2000")
+
+        self.form_layout = form_layout
 
         # disable the ok button by default until the user inputs valid values
         self.button_box.button(QDialogButtonBox.Ok).setEnabled(False)
@@ -725,37 +957,47 @@ class ExchangerInputDialog(QDialog):
         else:
             is_id_valid = False
 
-        try:
-            duty = float(duty)
-        except ValueError as ex:
-            is_duty_valid = False
-        else:
-            is_duty_valid = True
+        is_duty_valid = _is_value_valid(duty)
 
-        try:
-            pressure = float(pressure)
-        except ValueError as ex:
-            is_pressure_valid = False
-        else:
-            validator = self._pressure_editor.validator()
-            if validator.bottom() <= pressure <= validator.top():
-                is_pressure_valid = True
-            else:
-                is_pressure_valid = False
+        is_pressure_valid = _is_value_valid(
+            pressure, self._pressure_editor.validator()
+        )
 
-        try:
-            factor = float(factor)
-        except ValueError as ex:
-            is_factor_valid = False
-        else:
-            validator = self._factor_editor.validator()
-            if validator.bottom() <= factor <= validator.top():
-                is_factor_valid = True
-            else:
-                is_factor_valid = False
+        is_factor_valid = _is_value_valid(
+            factor, self._ut_in_editor.validator()
+        )
 
-        if is_id_valid and is_duty_valid and is_pressure_valid and \
-                is_factor_valid:
+        all_checks = [
+            is_id_valid,
+            is_duty_valid,
+            is_pressure_valid,
+            is_factor_valid
+        ]
+
+        if self._ex_type == 'utility':
+            ut_in = self._ut_in_editor.text()
+            ut_out = self._ut_out_editor.text()
+            ut_coef = self._ut_coef_editor.text()
+
+            is_ut_in_valid = _is_value_valid(
+                ut_in, self._ut_in_editor.validator()
+            )
+
+            is_ut_out_valid = _is_value_valid(
+                ut_out, self._ut_out_editor.validator()
+            )
+
+            is_ut_coef_valid = _is_value_valid(
+                ut_coef, self._ut_coef_editor.validator()
+            )
+
+            all_checks.extend([
+                is_ut_in_valid,
+                is_ut_out_valid,
+                is_ut_coef_valid
+            ])
+
+        if all(all_checks):
             self.button_box.button(QDialogButtonBox.Ok).setEnabled(True)
         else:
             self.button_box.button(QDialogButtonBox.Ok).setEnabled(False)
@@ -770,9 +1012,28 @@ class ExchangerInputDialog(QDialog):
         ex_pres = float(self._pressure_editor.text())
         ex_factor = float(self._factor_editor.text())
 
-        self._setup.add_exchanger(self._des_type, ex_id, ex_duty,
-                                  self._interval, self._source, self._dest,
-                                  ex_type, ex_arr, ex_shell, ex_tube, ex_pres)
+        if self._ex_type == 'process':
+            self._setup.add_exchanger(self._des_type, ex_id, ex_duty,
+                                      self._interval, self._source, self._dest,
+                                      ex_type, ex_arr, ex_shell, ex_tube,
+                                      ex_pres, ex_factor)
+        else:
+            if self._dest == 'Cold utility':
+                util_type = 'cold'
+                stream_id = self._source
+            elif self._source == 'Hot utility':
+                util_type = 'hot'
+                stream_id = self._dest
+
+            ut_in = float(self._ut_in_editor.text())
+            ut_out = float(self._ut_out_editor.text())
+            ut_coef = float(self._ut_coef_editor.text())
+
+            self._setup.add_utility_exchanger(
+                self._des_type, ex_id, ex_duty,
+                self._interval, util_type, stream_id, ut_in, ut_out, ut_coef,
+                ex_type, ex_arr, ex_shell, ex_tube, ex_pres, ex_factor
+            )
 
 
 class SplitStreamDialog(QDialog):
@@ -906,6 +1167,24 @@ class StreamSplitTableModel(QAbstractTableModel):
             return None
 
 
+def _is_value_valid(value: float, validator: QValidator = None) -> bool:
+    try:
+        value = float(value)
+    except ValueError as ex:
+        return False
+    else:
+        if validator is None:
+            return True
+        else:
+            bottom = validator.bottom()
+            top = validator.top()
+
+            if bottom <= value <= top:
+                return True
+            else:
+                return False
+
+
 if __name__ == "__main__":
     import sys
     import pathlib
@@ -917,7 +1196,7 @@ if __name__ == "__main__":
 
     app = QApplication(sys.argv)
 
-    w = PinchDesignDialog(setup, 'blw')
+    w = PinchDesignDialog(setup)
     w.show()
 
     sys.exit(app.exec_())
