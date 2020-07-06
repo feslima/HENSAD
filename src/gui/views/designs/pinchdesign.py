@@ -1,3 +1,5 @@
+import pathlib
+
 import numpy as np
 import pandas as pd
 from PyQt5.QtCore import (QAbstractTableModel, QModelIndex, QPointF, QRectF,
@@ -7,14 +9,15 @@ from PyQt5.QtGui import (QColor, QDoubleValidator, QFont, QFontMetrics, QIcon,
                          QRegExpValidator, QResizeEvent, QShowEvent,
                          QTransform, QValidator)
 from PyQt5.QtWidgets import (QAction, QApplication, QComboBox, QDialog,
-                             QDialogButtonBox, QFormLayout, QGraphicsItem,
+                             QDialogButtonBox, QFileDialog, QFormLayout,
+                             QGraphicsEllipseItem, QGraphicsItem,
                              QGraphicsLineItem, QGraphicsScene,
                              QGraphicsSceneContextMenuEvent,
                              QGraphicsSceneHoverEvent,
                              QGraphicsSceneMouseEvent, QGraphicsView,
                              QGridLayout, QHeaderView, QLabel, QLineEdit,
                              QMenu, QStyleOptionGraphicsItem, QTableView,
-                             QVBoxLayout, QWidget, QGraphicsEllipseItem)
+                             QToolBar, QVBoxLayout, QWidget)
 
 from gui.models.core import (COST_DATA, HEDFM, MATERIAL_DATA, SFM, STFCFM,
                              STFM, ArrangementType, ExchangerType,
@@ -342,17 +345,51 @@ class UtilityExchangerItem(QGraphicsEllipseItem):
 
 
 class PinchDesignDialog(QDialog):
-    def __init__(self, setup: Setup):
+    def __init__(self, setup: Setup, filename: str):
         super().__init__()
         self.resize(1024, 800)
         self.setMinimumSize(QSize(1024, 800))
         self.setWindowFlags(Qt.Window)
 
         self._setup = setup
+        self._filename = filename
 
         self.createUi()
 
+    def save_design(self):
+        if pathlib.Path(self._filename).resolve().exists():
+            self._setup.save(self._filename)
+        else:
+            self._save_as()
+
+    def _save_as(self):
+        dialog_title = "Select the name and where to save the .hsd file"
+        filetype = "HENSAD files (*.hsd)"
+        homedir = pathlib.Path().home()
+
+        hsd_filepath, _ = QFileDialog.getSaveFileName(
+            self,
+            dialog_title,
+            str(homedir),
+            filetype
+        )
+
+        if hsd_filepath != '':
+            self._filename = str(hsd_filepath)
+            self._setup.save(str(hsd_filepath))
+
     def createUi(self):
+        toolbar = QToolBar(self)
+
+        save_icon = QIcon()
+        save_icon.addPixmap(
+            QPixmap(":/files/save_icon.svg"), QIcon.Normal, QIcon.Off
+        )
+        save_action = QAction(save_icon, 'Save', self)
+        save_action.triggered.connect(self.save_design)
+
+        toolbar.addAction(save_action)
+
         above_table_view = QTableView(self)
         above_table_model = ExchangerDesignTableModel(
             self._setup, 'abv', above_table_view
@@ -394,10 +431,11 @@ class PinchDesignDialog(QDialog):
         self.below_view.setScene(self.below_scene)
 
         layout = QGridLayout()
-        layout.addWidget(above_table_view, 0, 0, 1, 1)
-        layout.addWidget(self.above_view, 1, 0, 1, 1)
-        layout.addWidget(below_table_view, 0, 1, 1, 1)
-        layout.addWidget(self.below_view, 1, 1, 1, 1)
+        layout.addWidget(toolbar, 0, 0, 1, 1)
+        layout.addWidget(above_table_view, 1, 0, 1, 1)
+        layout.addWidget(self.above_view, 2, 0, 1, 1)
+        layout.addWidget(below_table_view, 1, 1, 1, 1)
+        layout.addWidget(self.below_view, 2, 1, 1, 1)
         self.setLayout(layout)
 
     def showEvent(self, event: QShowEvent):
@@ -891,12 +929,6 @@ class ExchangerInputDialog(QDialog):
             form_layout.setWidget(9, QFormLayout.FieldRole, ut_out_editor)
             form_layout.setWidget(10, QFormLayout.FieldRole, ut_coef_editor)
 
-            id_edit.setText("E5")
-            duty_editor.setText("100")
-            ut_in_editor.setText("255")
-            ut_out_editor.setText("255")
-            ut_coef_editor.setText("2000")
-
         self.form_layout = form_layout
 
         # disable the ok button by default until the user inputs valid values
@@ -1196,7 +1228,7 @@ if __name__ == "__main__":
 
     app = QApplication(sys.argv)
 
-    w = PinchDesignDialog(setup)
+    w = PinchDesignDialog(setup, str(hsd_filepath))
     w.show()
 
     sys.exit(app.exec_())
