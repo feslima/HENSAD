@@ -17,7 +17,7 @@ from PyQt5.QtWidgets import (QAction, QApplication, QComboBox, QDialog,
                              QGraphicsSceneMouseEvent, QGraphicsView,
                              QGridLayout, QHeaderView, QLabel, QLineEdit,
                              QMenu, QStyleOptionGraphicsItem, QTableView,
-                             QToolBar, QVBoxLayout, QWidget)
+                             QToolBar, QVBoxLayout, QWidget, QMessageBox)
 
 from gui.models.core import (COST_DATA, HEDFM, MATERIAL_DATA, SFM, STFCFM,
                              STFM, ArrangementType, ExchangerType,
@@ -1061,11 +1061,30 @@ class ExchangerInputDialog(QDialog):
             ut_out = float(self._ut_out_editor.text())
             ut_coef = float(self._ut_coef_editor.text())
 
-            self._setup.add_utility_exchanger(
-                self._des_type, ex_id, ex_duty,
-                self._interval, util_type, stream_id, ut_in, ut_out, ut_coef,
-                ex_type, ex_arr, ex_shell, ex_tube, ex_pres, ex_factor
-            )
+            try:
+                self._setup.add_utility_exchanger(
+                    self._des_type, ex_id, ex_duty,
+                    self._interval, util_type, stream_id,
+                    ut_in, ut_out, ut_coef,
+                    ex_type, ex_arr, ex_shell, ex_tube, ex_pres, ex_factor
+                )
+            except ValueError as err:
+                err_msg = str(err)
+
+                if 'outside allowed' in err_msg:
+                    # just warn the user, do not raise exception
+                    msg_box = QMessageBox(
+                        QMessageBox.Warning,
+                        'Invalid input value.',
+                        err_msg,
+                        buttons=QMessageBox.Ok,
+                        parent=None
+                    )
+                    msg_box.exec_()
+
+                else:
+                    # do not treat exception, just re-raise it
+                    raise err
 
 
 class SplitStreamDialog(QDialog):

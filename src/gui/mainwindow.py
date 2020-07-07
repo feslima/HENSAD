@@ -23,6 +23,7 @@ from gui.views.diagrams.enthalpy import CompositeEnthalpyDialog
 from gui.views.diagrams.temperatureinterval import \
     TemperatureIntervalDiagramDialog
 from gui.views.py.mainwindow import Ui_MainWindow
+from gui.base import my_exception_hook
 
 DEFAULT_DT = 10
 
@@ -339,5 +340,7 @@ if __name__ == "__main__":
 
     w = MainWindow()
     w.show()
+
+    sys.excepthook = my_exception_hook
 
     sys.exit(app.exec_())
