@@ -16,7 +16,7 @@ SFM = SummaryFrameMapper
 
 class TemperatureIntervalDiagramDialog(QDialog):
 
-    def __init__(self, setup: Setup, debug_frame=False):
+    def __init__(self, setup: Setup):
         # ---------------------------- settings -------------------------------
         super().__init__()
         self.ui = Ui_Dialog()
@@ -242,7 +242,7 @@ if __name__ == "__main__":
 
     app = QApplication(sys.argv)
 
-    w = TemperatureIntervalDiagramDialog(setup, debug_frame=False)
+    w = TemperatureIntervalDiagramDialog(setup)
     w.show()
 
     sys.exit(app.exec_())

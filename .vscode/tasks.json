@@ -9,13 +9,21 @@
             "label": "compile UI",
             "type": "shell",
             "command": "${config:python.pythonPath} ${workspaceFolder}/src/gui/views/convert_ui.py",
-            "problemMatcher": []
+            "problemMatcher": [],
+            "group": {
+                "kind": "build",
+                "isDefault": true
+            }
         },
         {
             "label": "compile resources",
             "type": "shell",
             "command": "${env:USERPROFILE}/miniconda3/envs/hensad/Scripts/pyrcc5.exe -o ${workspaceFolder}/src/gui/resources/icons_rc.py ${workspaceFolder}/src/gui/resources/icons.qrc",
-            "problemMatcher": []
+            "problemMatcher": [],
+            "group": {
+                "kind": "build",
+                "isDefault": false
+            }
         }
     ]
 }

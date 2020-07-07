@@ -479,7 +479,7 @@
          <property name="labelAlignment">
           <set>Qt::AlignRight|Qt::AlignTrailing|Qt::AlignVCenter</set>
          </property>
-         <item row="0" column="0">
+         <item row="1" column="0">
           <widget class="QLabel" name="label_12">
            <property name="font">
             <font>
@@ -492,14 +492,17 @@
            </property>
           </widget>
          </item>
-         <item row="0" column="1">
-          <widget class="QLabel" name="label_13">
+         <item row="1" column="1">
+          <widget class="QLabel" name="hotUtilLabel">
            <property name="text">
-            <string>TextLabel</string>
+            <string/>
+           </property>
+           <property name="alignment">
+            <set>Qt::AlignCenter</set>
            </property>
           </widget>
          </item>
-         <item row="1" column="0">
+         <item row="2" column="0">
           <widget class="QLabel" name="label_14">
            <property name="font">
             <font>
@@ -512,14 +515,17 @@
            </property>
           </widget>
          </item>
-         <item row="1" column="1">
-          <widget class="QLabel" name="label_15">
+         <item row="2" column="1">
+          <widget class="QLabel" name="coldUtilLabel">
            <property name="text">
-            <string>TextLabel</string>
+            <string/>
+           </property>
+           <property name="alignment">
+            <set>Qt::AlignCenter</set>
            </property>
           </widget>
          </item>
-         <item row="2" column="0">
+         <item row="3" column="0">
           <widget class="QLabel" name="label_20">
            <property name="font">
             <font>
@@ -532,14 +538,17 @@
            </property>
           </widget>
          </item>
-         <item row="2" column="1">
-          <widget class="QLabel" name="label_21">
+         <item row="3" column="1">
+          <widget class="QLabel" name="minExLabel">
            <property name="text">
-            <string>TextLabel</string>
+            <string/>
+           </property>
+           <property name="alignment">
+            <set>Qt::AlignCenter</set>
            </property>
           </widget>
          </item>
-         <item row="3" column="0">
+         <item row="0" column="0">
           <widget class="QLabel" name="label_22">
            <property name="font">
             <font>
@@ -548,14 +557,17 @@
             </font>
            </property>
            <property name="text">
-            <string>Pinch present:</string>
+            <string>Pinch temperature:</string>
            </property>
           </widget>
          </item>
-         <item row="3" column="1">
-          <widget class="QLabel" name="label_23">
+         <item row="0" column="1">
+          <widget class="QLabel" name="pinchLabel">
            <property name="text">
-            <string>TextLabel</string>
+            <string/>
+           </property>
+           <property name="alignment">
+            <set>Qt::AlignCenter</set>
            </property>
           </widget>
          </item>

@@ -1,6 +1,7 @@
 import json
 import pathlib
 
+import numpy as np
 import pandas as pd
 from PyQt5.QtCore import Qt
 from PyQt5.QtGui import QIntValidator
@@ -15,6 +16,10 @@ from gui.models.input_streams import (FilmCoefficientEditorDelegate,
                                       StreamIdDelegate, StreamInputTableModel,
                                       TemperatureEditorDelegate)
 from gui.models.summary_table import SummaryModel
+from gui.views.diagrams.cascade import CascadeDiagramDialog
+from gui.views.diagrams.enthalpy import CompositeEnthalpyDialog
+from gui.views.diagrams.temperatureinterval import \
+    TemperatureIntervalDiagramDialog
 from gui.views.py.mainwindow import Ui_MainWindow
 
 DEFAULT_DT = 10
@@ -89,7 +94,6 @@ class MainWindow(QMainWindow):
         )
 
         # DT approach editor
-        # TODO: color behavior of input value
         dt_validator = MinTempApproachValidator(
             1, 300, parent=self.ui.dtApproachLineEdit
         )
@@ -119,9 +123,33 @@ class MainWindow(QMainWindow):
             self.on_approach_temp_changed
         )
 
+        self.ui.tiDiagramPushButton.clicked.connect(
+            self.open_interval_diagram
+        )
+
+        self.ui.cascadeDiagramPushButton.clicked.connect(
+            self.open_cascade_diagram
+        )
+
+        self.ui.tqDiagramPushButton.clicked.connect(
+            self.open_enthalpy_diagram
+        )
+
         self._setup.hot_changed.connect(self.on_summary_table_change)
         self._setup.cold_changed.connect(self.on_summary_table_change)
         self._setup.dt_changed.connect(self.on_summary_table_change)
+
+    def open_interval_diagram(self) -> None:
+        dialog = TemperatureIntervalDiagramDialog(self._setup)
+        dialog.exec_()
+
+    def open_cascade_diagram(self) -> None:
+        dialog = CascadeDiagramDialog(self._setup)
+        dialog.exec_()
+
+    def open_enthalpy_diagram(self) -> None:
+        dialog = CompositeEnthalpyDialog(self._setup)
+        dialog.exec_()
 
     def set_input_table_delegates(self, typ: str):
         if typ == 'hot':
@@ -226,6 +254,30 @@ class MainWindow(QMainWindow):
         self._setup.dt = float(self.ui.dtApproachLineEdit.text())
 
     def on_summary_table_change(self):
+        dt_edit = self.ui.dtApproachLineEdit
+        dt_edit.blockSignals(True)
+        dt_edit.setText(str(self._setup.dt))
+        dt_edit.blockSignals(False)
+
+        # load labels
+        pinch_label = self.ui.pinchLabel
+        pinch = self._setup.pinch
+        if np.isnan(pinch):
+            pinch = 'No pinch found'
+        pinch_label.setText(str(pinch))
+
+        huq = self._setup.hot_util_req
+        cuq = self._setup.cold_util_req
+        n_ex = self._setup.min_exchangers
+
+        huq_label = self.ui.hotUtilLabel
+        cuq_label = self.ui.coldUtilLabel
+        minex_label = self.ui.minExLabel
+
+        huq_label.setText(str(huq))
+        cuq_label.setText(str(cuq))
+        minex_label.setText(str(n_ex))
+
         # check if temperatures are set correctly
         hot = self._setup.hot
         cold = self._setup.cold
@@ -239,10 +291,20 @@ class MainWindow(QMainWindow):
             (cold[SFM.ID.name].value_counts() == 1).all() and \
             not cold.empty
 
-        if hot_ok and cold_ok:
+        all_checks = all([hot_ok, cold_ok])
+        has_pinch = pinch != 'No pinch found'
+
+        if all_checks:
             self.ui.tiDiagramPushButton.setEnabled(True)
+            self.ui.cascadeDiagramPushButton.setEnabled(True)
         else:
             self.ui.tiDiagramPushButton.setEnabled(False)
+            self.ui.cascadeDiagramPushButton.setEnabled(False)
+
+        if all_checks and has_pinch:
+            self.ui.tqDiagramPushButton.setEnabled(True)
+        else:
+            self.ui.tqDiagramPushButton.setEnabled(False)
 
 
 if __name__ == "__main__":
