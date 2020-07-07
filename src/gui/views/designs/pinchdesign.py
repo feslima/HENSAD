@@ -708,7 +708,7 @@ class PinchDesignScene(QGraphicsScene):
 
                         ex_item = UtilityExchangerItem(
                             x, y, ex_label, ex_duty,
-                            self._setup, self._des_type
+                            self._des_type, self._setup
                         )
 
                     else:

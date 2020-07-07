@@ -16,7 +16,9 @@ from gui.models.input_streams import (FilmCoefficientEditorDelegate,
                                       StreamIdDelegate, StreamInputTableModel,
                                       TemperatureEditorDelegate)
 from gui.models.summary_table import SummaryModel
+from gui.views.designs.pinchdesign import PinchDesignDialog
 from gui.views.diagrams.cascade import CascadeDiagramDialog
+from gui.views.diagrams.eaoc import EAOCDialog
 from gui.views.diagrams.enthalpy import CompositeEnthalpyDialog
 from gui.views.diagrams.temperatureinterval import \
     TemperatureIntervalDiagramDialog
@@ -135,6 +137,14 @@ class MainWindow(QMainWindow):
             self.open_enthalpy_diagram
         )
 
+        self.ui.designToolPushButton.clicked.connect(
+            self.open_network_design
+        )
+
+        self.ui.eaocPlotPushButton.clicked.connect(
+            self.open_eaoc_plot
+        )
+
         self._setup.hot_changed.connect(self.on_summary_table_change)
         self._setup.cold_changed.connect(self.on_summary_table_change)
         self._setup.dt_changed.connect(self.on_summary_table_change)
@@ -149,6 +159,17 @@ class MainWindow(QMainWindow):
 
     def open_enthalpy_diagram(self) -> None:
         dialog = CompositeEnthalpyDialog(self._setup)
+        dialog.exec_()
+
+    def open_network_design(self) -> None:
+        current_hsd_name = pathlib.Path(
+            self.windowTitle().split('HENSAD - ')[1]
+        ).resolve()
+        dialog = PinchDesignDialog(self._setup, str(current_hsd_name))
+        dialog.exec_()
+
+    def open_eaoc_plot(self) -> None:
+        dialog = EAOCDialog(self._setup)
         dialog.exec_()
 
     def set_input_table_delegates(self, typ: str):
@@ -303,8 +324,12 @@ class MainWindow(QMainWindow):
 
         if all_checks and has_pinch:
             self.ui.tqDiagramPushButton.setEnabled(True)
+            self.ui.designToolPushButton.setEnabled(True)
+            self.ui.eaocPlotPushButton.setEnabled(True)
         else:
             self.ui.tqDiagramPushButton.setEnabled(False)
+            self.ui.designToolPushButton.setEnabled(False)
+            self.ui.eaocPlotPushButton.setEnabled(False)
 
 
 if __name__ == "__main__":
