@@ -267,7 +267,7 @@
         <widget class="QTableView" name="hotFilmCoefTableView">
          <property name="maximumSize">
           <size>
-           <width>200</width>
+           <width>250</width>
            <height>16777215</height>
           </size>
          </property>
@@ -404,7 +404,7 @@
         <widget class="QTableView" name="coldFilmCoefTableView">
          <property name="maximumSize">
           <size>
-           <width>200</width>
+           <width>250</width>
            <height>16777215</height>
           </size>
          </property>

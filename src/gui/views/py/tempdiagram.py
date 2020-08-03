@@ -23,16 +23,23 @@ class Ui_Dialog(object):
         self.approachTempHorizontalSlider.setSingleStep(2)
         self.approachTempHorizontalSlider.setProperty("value", 10)
         self.approachTempHorizontalSlider.setOrientation(QtCore.Qt.Horizontal)
+        self.approachTempHorizontalSlider.setTickPosition(QtWidgets.QSlider.TicksBelow)
+        self.approachTempHorizontalSlider.setTickInterval(1)
         self.approachTempHorizontalSlider.setObjectName("approachTempHorizontalSlider")
         self.gridLayout.addWidget(self.approachTempHorizontalSlider, 0, 0, 1, 1)
+        self.label = QtWidgets.QLabel(Dialog)
+        self.label.setObjectName("label")
+        self.gridLayout.addWidget(self.label, 0, 1, 1, 1)
         self.graphicsView = QtWidgets.QGraphicsView(Dialog)
         self.graphicsView.setAlignment(QtCore.Qt.AlignLeading|QtCore.Qt.AlignLeft|QtCore.Qt.AlignTop)
         self.graphicsView.setObjectName("graphicsView")
-        self.gridLayout.addWidget(self.graphicsView, 1, 0, 1, 1)
+        self.gridLayout.addWidget(self.graphicsView, 1, 0, 1, 2)
 
         self.retranslateUi(Dialog)
+        self.approachTempHorizontalSlider.valueChanged['int'].connect(self.label.setNum)
         QtCore.QMetaObject.connectSlotsByName(Dialog)
 
     def retranslateUi(self, Dialog):
         _translate = QtCore.QCoreApplication.translate
         Dialog.setWindowTitle(_translate("Dialog", "Dialog"))
+        self.label.setText(_translate("Dialog", "10"))

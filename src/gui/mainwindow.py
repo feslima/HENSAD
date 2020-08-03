@@ -8,8 +8,9 @@ from PyQt5.QtGui import QIntValidator
 from PyQt5.QtWidgets import (QApplication, QFileDialog, QHeaderView,
                              QMainWindow, QTableView)
 
-from gui.models.core import (FilmCoefficientsFrameMapper, Setup,
-                             StreamFrameMapper)
+from gui.base import my_exception_hook
+from gui.models.core import (FilmCoefficientsFrameMapper, Setup, SIUnits,
+                             StreamFrameMapper, USUnits)
 from gui.models.input_streams import (FilmCoefficientEditorDelegate,
                                       StreamEditorDelegate,
                                       StreamFilmCoeffTableModel,
@@ -23,7 +24,6 @@ from gui.views.diagrams.enthalpy import CompositeEnthalpyDialog
 from gui.views.diagrams.temperatureinterval import \
     TemperatureIntervalDiagramDialog
 from gui.views.py.mainwindow import Ui_MainWindow
-from gui.base import my_exception_hook
 
 DEFAULT_DT = 10
 
@@ -145,10 +145,19 @@ class MainWindow(QMainWindow):
         self.ui.eaocPlotPushButton.clicked.connect(
             self.open_eaoc_plot
         )
+        self.ui.unitsComboBox.currentTextChanged.connect(
+            self.update_setup_units
+        )
 
         self._setup.hot_changed.connect(self.on_summary_table_change)
         self._setup.cold_changed.connect(self.on_summary_table_change)
         self._setup.dt_changed.connect(self.on_summary_table_change)
+
+    def update_setup_units(self, text: str) -> None:
+        if text == 'SI':
+            self._setup.units = SIUnits()
+        elif text == 'US':
+            self._setup.units = USUnits()
 
     def open_interval_diagram(self) -> None:
         dialog = TemperatureIntervalDiagramDialog(self._setup)

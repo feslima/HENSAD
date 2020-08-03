@@ -31,6 +31,14 @@ class StreamFrameMapper(FrameColumnMapperEnum):
     TOUT = 'Outlet Temperature'
 
 
+_UNIT_MAPPER = {
+    StreamFrameMapper.FLOW: 'mass_flow',
+    StreamFrameMapper.CP: 'heat_capacity',
+    StreamFrameMapper.TIN: 'temperature',
+    StreamFrameMapper.TOUT: 'temperature'
+}
+
+
 @unique
 class SummaryFrameMapper(FrameColumnMapperEnum):
     INTERVAL = 'Interval Name'
@@ -40,6 +48,16 @@ class SummaryFrameMapper(FrameColumnMapperEnum):
     CUMHEAT = 'Cumulative Heat'
     HOTSTRIDX = 'Hot Stream Index'
     COLDSTRIDX = 'Cold Stream Index'
+
+
+_UNIT_MAPPER.update(
+    {
+        SummaryFrameMapper.TIN: 'temperature',
+        SummaryFrameMapper.TOUT: 'temperature',
+        SummaryFrameMapper.EXHEAT: 'power',
+        SummaryFrameMapper.CUMHEAT: 'power',
+    }
+)
 
 
 @unique
@@ -76,6 +94,9 @@ class HeatExchangerDesignFrameMapper(FrameColumnMapperEnum):
 class FilmCoefficientsFrameMapper(FrameColumnMapperEnum):
     ID = 'Stream ID'
     COEF = 'Film Heat Transfer Coefficient'
+
+
+_UNIT_MAPPER.update({FilmCoefficientsFrameMapper.COEF: 'heat_coeff'})
 
 
 @unique
@@ -161,6 +182,17 @@ class BaseUnits(ABC):
         self._area = ''
         self._energy = ''
         self._time = 's'
+
+    def enum_with_unit(self, enum: FrameColumnMapperEnum) -> str:
+        try:
+            attr = _UNIT_MAPPER[enum]
+        except KeyError:
+            unit = ''
+        else:
+            unit = ' [' + getattr(self, attr) + ']'
+
+        str_fmt = "{0}{1}".format(enum.value, unit)
+        return str_fmt
 
 
 class SIUnits(BaseUnits):

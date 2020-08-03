@@ -19,11 +19,7 @@
             "label": "compile resources",
             "type": "shell",
             "command": "${env:USERPROFILE}/miniconda3/envs/hensad/Scripts/pyrcc5.exe -o ${workspaceFolder}/src/gui/resources/icons_rc.py ${workspaceFolder}/src/gui/resources/icons.qrc",
-            "problemMatcher": [],
-            "group": {
-                "kind": "build",
-                "isDefault": false
-            }
+            "problemMatcher": []
         }
     ]
 }

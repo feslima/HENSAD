@@ -105,12 +105,15 @@ class StreamInputTableModel(QAbstractTableModel):
     def __init__(self, setup: Setup, stream_type: str, parent: QTableView):
         super().__init__(parent=parent)
         self._setup = setup
+        self._unit_set = setup.units
         self._stream_type = stream_type
         self.update_stream_table()
 
         self._setup.hot_changed.connect(self.update_stream_table)
         self._setup.cold_changed.connect(self.update_stream_table)
         self._setup.dt_changed.connect(self.update_stream_table)
+
+        self._setup.units_changed.connect(self.update_header_data)
 
     def update_stream_table(self):
         self.layoutAboutToBeChanged.emit()
@@ -122,6 +125,10 @@ class StreamInputTableModel(QAbstractTableModel):
 
         self.layoutChanged.emit()
 
+    def update_header_data(self):
+        self._unit_set = self._setup.units
+        self.headerDataChanged.emit(Qt.Horizontal, 0, self.columnCount())
+
     def rowCount(self, parent: QModelIndex = None):
         return len(self._input_table)
 
@@ -132,7 +139,9 @@ class StreamInputTableModel(QAbstractTableModel):
                    role=Qt.DisplayRole):
         if role == Qt.DisplayRole:
             if orientation == Qt.Horizontal:
-                return STFM.headers()[section]
+                hval = STFM.headers()[section]
+                header = self._unit_set.enum_with_unit(STFM(hval))
+                return header
             else:
                 return self._input_table.index[section] + 1
 
@@ -206,11 +215,14 @@ class StreamFilmCoeffTableModel(QAbstractTableModel):
     def __init__(self, setup: Setup, stream_type: str, parent: QTableView):
         super().__init__(parent=parent)
         self._setup = setup
+        self._unit_set = setup.units
         self._stream_type = stream_type
         self.update_stream_table()
 
         self._setup.hot_coeffs_changed.connect(self.update_stream_table)
         self._setup.cold_coeffs_changed.connect(self.update_stream_table)
+
+        self._setup.units_changed.connect(self.update_header_data)
 
     def update_stream_table(self):
         self.layoutAboutToBeChanged.emit()
@@ -222,6 +234,10 @@ class StreamFilmCoeffTableModel(QAbstractTableModel):
 
         self.layoutChanged.emit()
 
+    def update_header_data(self):
+        self._unit_set = self._setup.units
+        self.headerDataChanged.emit(Qt.Horizontal, 0, self.columnCount())
+
     def rowCount(self, parent: QModelIndex = None):
         return len(self._input_table)
 
@@ -232,7 +248,8 @@ class StreamFilmCoeffTableModel(QAbstractTableModel):
                    role=Qt.DisplayRole):
         if role == Qt.DisplayRole:
             if orientation == Qt.Horizontal:
-                return FCFM.COEF.value
+                header = self._unit_set.enum_with_unit(FCFM.COEF)
+                return header
             else:
                 return self._input_table.index[section] + 1
 

@@ -17,9 +17,12 @@ class SummaryModel(QAbstractTableModel):
     def __init__(self, setup: Setup, parent: QTableView):
         super().__init__(parent=parent)
         self._setup = setup
+        self._unit_set = setup.units
         setup.hot_changed.connect(self.update_summary)
         setup.cold_changed.connect(self.update_summary)
         setup.dt_changed.connect(self.update_summary)
+
+        self._setup.units_changed.connect(self.update_header_data)
 
         self.update_summary()
 
@@ -29,6 +32,10 @@ class SummaryModel(QAbstractTableModel):
         self._summary = self._setup.summary
 
         self.layoutChanged.emit()
+
+    def update_header_data(self):
+        self._unit_set = self._setup.units
+        self.headerDataChanged.emit(Qt.Horizontal, 0, self.columnCount())
 
     def rowCount(self, parent: QModelIndex = QModelIndex()):
         return len(self._summary)
@@ -42,7 +49,7 @@ class SummaryModel(QAbstractTableModel):
             if orientation == Qt.Horizontal:
                 sec = SFM.headers()[section]
                 if sec not in [SFM.HOTSTRIDX.value, SFM.COLDSTRIDX.value]:
-                    return sec
+                    return self._unit_set.enum_with_unit(SFM(sec))
             else:
                 return None
 
