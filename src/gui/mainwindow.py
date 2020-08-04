@@ -1,5 +1,13 @@
 import json
 import pathlib
+import sys
+
+if getattr(sys, 'frozen', False):
+    pkg_dir = sys._MEIPASS
+else:
+    pkg_dir = str(pathlib.Path(__file__).resolve().parent.parent)
+
+sys.path.append(pkg_dir)
 
 import numpy as np
 import pandas as pd

@@ -90,6 +90,20 @@ class HeatExchangerDesignFrameMapper(FrameColumnMapperEnum):
     F = 'Correction Factor'
 
 
+_UNIT_MAPPER.update(
+    {
+        HeatExchangerDesignFrameMapper.DUTY: 'power',
+        HeatExchangerDesignFrameMapper.A: 'area',
+        HeatExchangerDesignFrameMapper.HOT_IN: 'temperature',
+        HeatExchangerDesignFrameMapper.HOT_OUT: 'temperature',
+        HeatExchangerDesignFrameMapper.COLD_IN: 'temperature',
+        HeatExchangerDesignFrameMapper.COLD_OUT: 'temperature',
+        HeatExchangerDesignFrameMapper.DT: 'temperature',
+        HeatExchangerDesignFrameMapper.U: 'heat_coeff',
+    }
+)
+
+
 @unique
 class FilmCoefficientsFrameMapper(FrameColumnMapperEnum):
     ID = 'Stream ID'

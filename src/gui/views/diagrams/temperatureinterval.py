@@ -74,11 +74,13 @@ class TemperatureIntervalDiagramScene(QGraphicsScene):
 
         # ------------------------ internal variables -------------------------
         self._setup = setup
+        self._unit_set = setup.units
         self._hot_strm_arrows = pd.Series()  # cataloguer of hot side arrows
         self._cold_strm_arrows = pd.Series()  # cataloguer of cold side arrows
 
         # ------------------------------ signals ------------------------------
         setup.dt_changed.connect(self.update_interval)
+        setup.units_changed.connect(self.update_interval)
 
         # initialization
         self.update_interval()
@@ -116,7 +118,9 @@ class TemperatureIntervalDiagramScene(QGraphicsScene):
         int_size = h / (hot_int.size - 1)
 
         # ------------------------------ DT value -----------------------------
-        text = scene.addText("DT = " + str(int(dt)) + "(°C)")
+        text = scene.addText(
+            "DT = {0:g}({1})".format(dt, self._unit_set.temperature)
+        )
         text.setFont(font)
         fm = QFontMetrics(text.font())
         label_offset = fm.horizontalAdvance(text.toPlainText())
@@ -144,7 +148,9 @@ class TemperatureIntervalDiagramScene(QGraphicsScene):
             y_temp = self._map_y(self._temp_to_px(temp, np.flip(hot_int)))
 
             # add the hot side temperature labels
-            text = scene.addText("{0:4d} (°C)".format(int(temp)))
+            text = scene.addText(
+                "{0:4d} ({1})".format(int(temp), self._unit_set.temperature)
+            )
             text.setDefaultTextColor(Qt.red)
             text.setFont(font)
             fm = QFontMetrics(text.font())  # measure the text width required
@@ -152,7 +158,12 @@ class TemperatureIntervalDiagramScene(QGraphicsScene):
             text.setPos(x_temp - label_offset, y_temp)
 
             # cold side labels
-            text = scene.addText("{0:4d} (°C)".format(int(temp - dt)))
+            text = scene.addText(
+                "{0:4d} ({1})".format(
+                    int(temp - dt),
+                    self._unit_set.temperature
+                )
+            )
             text.setDefaultTextColor(Qt.blue)
             text.setFont(font)
             text.setPos(x_temp + w/2 + self._axis_width/2, y_temp)
@@ -174,8 +185,9 @@ class TemperatureIntervalDiagramScene(QGraphicsScene):
             text.setPos(x - text_size / 2, y + 0.5 * int_size)
 
             # Excess heat values
-            text = scene.addText("{0:g}".format(
-                summary.loc[i, SFM.EXHEAT.name]
+            text = scene.addText("{0:g}({1})".format(
+                summary.loc[i, SFM.EXHEAT.name],
+                self._unit_set.power
             ))
             text.setFont(font)
             text_size = fm.horizontalAdvance(text.toPlainText())

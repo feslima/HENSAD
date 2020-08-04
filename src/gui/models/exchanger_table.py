@@ -16,6 +16,7 @@ class ExchangerDesignTableModel(QAbstractTableModel):
 
         self._design_type = design_type
         self._setup = setup
+        self._unit_set = setup.units
 
         self._load_design()
 
@@ -23,6 +24,8 @@ class ExchangerDesignTableModel(QAbstractTableModel):
             self._setup.design_above_changed.connect(self._load_design)
         else:
             self._setup.design_below_changed.connect(self._load_design)
+
+        self._setup.units_changed.connect(self.update_header_data)
 
     def _load_design(self):
         self.layoutAboutToBeChanged.emit()
@@ -34,6 +37,10 @@ class ExchangerDesignTableModel(QAbstractTableModel):
 
         self.layoutChanged.emit()
 
+    def update_header_data(self):
+        self._unit_set = self._setup.units
+        self.headerDataChanged.emit(Qt.Horizontal, 0, self.columnCount())
+
     def rowCount(self, parent: QModelIndex = None):
         return len(self._design)
 
@@ -44,7 +51,9 @@ class ExchangerDesignTableModel(QAbstractTableModel):
                    role=Qt.DisplayRole):
         if role == Qt.DisplayRole:
             if orientation == Qt.Horizontal:
-                return HEDFM.headers()[section]
+                hval = HEDFM.headers()[section]
+                header = self._unit_set.enum_with_unit(HEDFM(hval))
+                return header
             else:
                 return self._design.index[section] + 1
 
