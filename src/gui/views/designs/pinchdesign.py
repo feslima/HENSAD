@@ -996,7 +996,7 @@ class ExchangerInputDialog(QDialog):
         )
 
         is_factor_valid = _is_value_valid(
-            factor, self._ut_in_editor.validator()
+            factor, self._factor_editor.validator()
         )
 
         all_checks = [

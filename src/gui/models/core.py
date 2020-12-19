@@ -305,6 +305,9 @@ class Setup(QObject):
             raise ValueError("All column names of DataFrame must be "
                              "specified.")
 
+        # update the ID from the input table
+        value.loc[:, FCFM.ID.name] = self.hot.loc[:, STFM.ID.name]
+
         self._hot_film_coef = value
         self.hot_coeffs_changed.emit()
 
@@ -327,6 +330,9 @@ class Setup(QObject):
         ).all(axis=None):
             raise ValueError("All column names of DataFrame must be "
                              "specified.")
+
+        # update the ID from the input table
+        value.loc[:, FCFM.ID.name] = self.cold.loc[:, STFM.ID.name]
 
         self._cold_film_coef = value
         self.cold_coeffs_changed.emit()
